@@ -1,0 +1,14 @@
+app_views
+desktop_entry
+discovery
+executor
+launcher_app
+launcher_cli
+main_window
+models
+runtime_paths
+service
+startup
+storage
+system_tray
+ui_components

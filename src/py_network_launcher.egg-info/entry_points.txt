@@ -1,0 +1,2 @@
+[console_scripts]
+py-network-launcher = desktop_entry:main

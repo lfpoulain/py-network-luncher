@@ -1,0 +1,63 @@
+name: Windows Build and Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --no-progress -y
+
+      - name: Build executable and installer
+        shell: powershell
+        run: .\installer\build-installer.ps1 -Python "python" -IsccPath "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+
+      - name: Create portable archive
+        shell: powershell
+        run: Compress-Archive -Path 'dist\Py Network Launcher\*' -DestinationPath 'dist\PyNetworkLauncher-portable.zip' -Force
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-network-launcher-windows
+          path: |
+            dist/PyNetworkLauncher-portable.zip
+            installer/dist/PyNetworkLauncherSetup.exe
+          if-no-files-found: error
+
+      - name: Publish CI prerelease
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ci-${{ github.sha }}
+          name: CI build ${{ github.sha }}
+          prerelease: true
+          generate_release_notes: false
+          body: |
+            Build Windows automatique généré depuis le commit `${{ github.sha }}`.
+
+            Contenu publié :
+            - archive portable PyInstaller
+            - installateur Windows Inno Setup
+          files: |
+            dist/PyNetworkLauncher-portable.zip
+            installer/dist/PyNetworkLauncherSetup.exe
