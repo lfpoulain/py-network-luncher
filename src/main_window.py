@@ -57,7 +57,9 @@ class MainWindow:
         self._execution_refresh_queued = False
         self._startup_warning: Optional[str] = None
         self._tray_warning: Optional[str] = None
+        self._network_settings_dirty = False
         self.config = self._load_initial_config()
+        self._applied_network_signature = self._network_settings_signature()
         self._collapsed_step_ids: set[str] = {step.id for sequence in self.config.sequences for step in sequence.steps}
         self.service = LauncherService(
             self.config,
@@ -74,8 +76,8 @@ class MainWindow:
         self.discovery_port_field = ft.TextField(label="Port discovery", width=160)
         self.home_assistant_url_field = ft.TextField(label="URL du serveur Home Assistant", width=460)
         self.home_assistant_token_field = ft.TextField(label="Token d'accès Home Assistant", password=True, can_reveal_password=True, width=460)
-        self.start_minimized_checkbox = ft.Checkbox(label="Démarrer cachée avec Windows")
-        self.start_with_windows_checkbox = ft.Checkbox(label="Lancer avec Windows")
+        self.start_with_windows_checkbox = ft.Checkbox(label="Lancer automatiquement avec Windows")
+        self.start_minimized_checkbox = ft.Checkbox(label="Démarrer cachée quand l'application est lancée avec Windows")
         self.close_action_group = ft.RadioGroup(
             content=ft.Column(
                 spacing=6,
@@ -94,7 +96,8 @@ class MainWindow:
         )
 
         self.sequence_name_field = ft.TextField(label="Nom de la séquence", expand=True)
-        self.run_on_app_start_checkbox = ft.Checkbox(label="Lancer au démarrage de l'application")
+        self.run_on_app_start_checkbox = ft.Checkbox(label="Lancer à chaque démarrage de l'application")
+        self.run_once_on_boot_checkbox = ft.Checkbox(label="Lancer une seule et unique fois")
 
         self.sequence_list_column = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, expand=True)
         self.sequence_editor_column = ft.Column(spacing=12, expand=True)
@@ -145,6 +148,9 @@ class MainWindow:
         self.page.window.height = 920
         self.page.window.prevent_close = False
         self.page.window.on_event = self._on_window_event
+        if self.hidden:
+            self.page.window.skip_task_bar = True
+            self.page.window.visible = False
         self.page.padding = 16
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.scroll = ft.ScrollMode.AUTO
@@ -161,8 +167,13 @@ class MainWindow:
 
     def _bind_static_events(self) -> None:
         self.node_name_field.on_blur = self._on_node_name_blur
+        self.api_port_field.on_blur = self._on_settings_fields_blur
+        self.discovery_port_field.on_blur = self._on_settings_fields_blur
+        self.home_assistant_url_field.on_blur = self._on_settings_fields_blur
+        self.home_assistant_token_field.on_blur = self._on_settings_fields_blur
         self.sequence_name_field.on_change = self._on_sequence_name_changed
         self.run_on_app_start_checkbox.on_change = self._on_sequence_flags_changed
+        self.run_once_on_boot_checkbox.on_change = self._on_sequence_flags_changed
         self.start_with_windows_checkbox.on_change = self._on_startup_settings_changed
         self.start_minimized_checkbox.on_change = self._on_startup_settings_changed
         self.close_action_group.on_change = self._on_close_action_changed
@@ -304,10 +315,12 @@ class MainWindow:
         self.discovery_port_field.value = str(settings.discovery_port)
         self.home_assistant_url_field.value = settings.home_assistant_url
         self.home_assistant_token_field.value = settings.home_assistant_token
-        self.start_minimized_checkbox.value = settings.start_minimized
         self.start_with_windows_checkbox.value = settings.start_with_windows
+        self.start_minimized_checkbox.value = settings.start_minimized and settings.start_with_windows
+        self._sync_startup_option_controls()
         self.close_action_group.value = settings.close_action
         self.config_path_text.value = str(config_path())
+        self._network_settings_dirty = self._network_settings_signature() != self._applied_network_signature
         self.startup_path_text.value = startup_registration_label() if settings.start_with_windows else "Non activée"
 
     def _refresh_sequence_list(self) -> None:
@@ -317,6 +330,8 @@ class MainWindow:
             summary: list[str] = []
             if sequence.run_on_app_start:
                 summary.append("app")
+            if sequence.run_once_on_boot:
+                summary.append("boot_once")
             subtitle = " | ".join(summary) if summary else "manuel"
             self.sequence_list_column.controls.append(
                 build_sequence_list_card(sequence=sequence, selected=selected, subtitle=subtitle, on_select=self._select_sequence)
@@ -344,10 +359,13 @@ class MainWindow:
             return
         self.sequence_name_field.value = sequence.name
         self.run_on_app_start_checkbox.value = sequence.run_on_app_start
+        self.run_once_on_boot_checkbox.value = sequence.run_once_on_boot
+        self._sync_sequence_trigger_controls()
         is_sequence_running = self.service.is_sequence_running(sequence.id)
         header_controls = build_sequence_editor_header(
             sequence_name_field=self.sequence_name_field,
             run_on_app_start_checkbox=self.run_on_app_start_checkbox,
+            run_once_on_boot_checkbox=self.run_once_on_boot_checkbox,
             action_labels=ACTION_LABELS,
             on_run_sequence=self._run_selected_sequence,
             on_stop_sequence=self._stop_selected_sequence,
@@ -548,9 +566,12 @@ class MainWindow:
         sequence = self._selected_sequence()
         if sequence is None:
             return
+        self._sync_sequence_trigger_controls()
         sequence.run_on_app_start = bool(self.run_on_app_start_checkbox.value)
+        sequence.run_once_on_boot = bool(self.run_once_on_boot_checkbox.value)
         if self._persist_safe():
             self._refresh_sequence_list()
+            self._refresh_sequence_editor()
             self.page.update()
 
     def _add_step(self, action_type: str) -> None:
@@ -577,6 +598,19 @@ class MainWindow:
         peers = self.service.get_peers()
         local_sequences = [s for s in self.service.get_sequences() if s.id != sequence.id]
         drag_group = f"sequence-steps-{sequence.id}"
+        selected_peer = next((peer for peer in peers if peer.node_id == step.remote_peer_id), None)
+        selected_remote_sequence = None
+        if selected_peer is not None:
+            selected_remote_sequence = next((item for item in selected_peer.sequences if item.id == step.remote_sequence_id), None)
+        cache_updated = False
+        if selected_peer is not None and step.remote_peer_name != selected_peer.name:
+            step.remote_peer_name = selected_peer.name
+            cache_updated = True
+        if selected_remote_sequence is not None and step.remote_sequence_name != selected_remote_sequence.name:
+            step.remote_sequence_name = selected_remote_sequence.name
+            cache_updated = True
+        if cache_updated:
+            self._persist_safe()
 
         def update_string(attr: str):
             def handler(event):
@@ -643,7 +677,20 @@ class MainWindow:
         def update_remote_peer(event):
             selected_peer = str(event.control.value or "")
             step.remote_peer_id = selected_peer
+            peer = next((item for item in peers if item.node_id == selected_peer), None)
+            step.remote_peer_name = peer.name if peer is not None else ""
             step.remote_sequence_id = ""
+            step.remote_sequence_name = ""
+            if self._persist_safe():
+                self._refresh_sequence_editor()
+                self.page.update()
+
+        def update_remote_sequence(event):
+            selected_sequence = str(event.control.value or "")
+            step.remote_sequence_id = selected_sequence
+            peer = next((item for item in peers if item.node_id == step.remote_peer_id), None)
+            remote_sequence = None if peer is None else next((item for item in peer.sequences if item.id == selected_sequence), None)
+            step.remote_sequence_name = remote_sequence.name if remote_sequence is not None else ""
             if self._persist_safe():
                 self._refresh_sequence_editor()
                 self.page.update()
@@ -739,6 +786,7 @@ class MainWindow:
             on_update_bool=update_bool,
             on_update_seconds=update_seconds,
             on_update_remote_peer=update_remote_peer,
+            on_update_remote_sequence=update_remote_sequence,
             on_pick_command=pick_command,
             is_collapsed=step.id in self._collapsed_step_ids,
             is_running=is_running,
@@ -754,23 +802,26 @@ class MainWindow:
 
     def _save_settings_only(self, _=None) -> None:
         try:
-            self._apply_network_settings_from_fields()
-            self._persist()
-            self._restart_service()
-            self._set_status("Réglages appliqués")
+            self._save_settings_draft_from_fields(show_status=False)
+            if self._network_settings_dirty:
+                self._restart_service()
+                self._applied_network_signature = self._network_settings_signature()
+                self._network_settings_dirty = False
+                self._set_status("Serveur redémarré avec les nouveaux réglages réseau")
+            else:
+                self._set_status("Réglages sauvegardés")
         except Exception as exc:
             self._set_status(self._format_exception(exc), error=True)
+        if self.active_section == "settings":
+            self._refresh_active_section()
         self._refresh_runtime_section()
         self.page.update()
 
     def _on_node_name_blur(self, _=None) -> None:
-        node_name = (self.node_name_field.value or "Mon poste").strip() or "Mon poste"
-        if node_name == self.config.settings.node_name:
-            return
-        self.config.settings.node_name = node_name
-        if self._persist_safe():
-            self._set_status("Nom du poste sauvegardé. Clique sur 'Appliquer les réglages réseau' pour l'annoncer sur le réseau.")
-            self.page.update()
+        self._save_settings_draft_from_fields()
+
+    def _on_settings_fields_blur(self, _=None) -> None:
+        self._save_settings_draft_from_fields()
 
     def _on_startup_settings_changed(self, _=None) -> None:
         try:
@@ -781,6 +832,26 @@ class MainWindow:
         except Exception as exc:
             self._set_status(self._format_exception(exc), error=True)
         self.page.update()
+
+    def _sync_startup_option_controls(self) -> None:
+        start_with_windows = bool(self.start_with_windows_checkbox.value)
+        self.start_minimized_checkbox.disabled = not start_with_windows
+        if not start_with_windows:
+            self.start_minimized_checkbox.value = False
+
+    def _sync_sequence_trigger_controls(self) -> None:
+        run_on_app_start = bool(self.run_on_app_start_checkbox.value)
+        run_once_on_boot = bool(self.run_once_on_boot_checkbox.value)
+        self.run_on_app_start_checkbox.disabled = False
+        self.run_once_on_boot_checkbox.disabled = False
+        if run_on_app_start:
+            run_once_on_boot = False
+            self.run_once_on_boot_checkbox.disabled = True
+        elif run_once_on_boot:
+            run_on_app_start = False
+            self.run_on_app_start_checkbox.disabled = True
+        self.run_on_app_start_checkbox.value = run_on_app_start
+        self.run_once_on_boot_checkbox.value = run_once_on_boot
 
     def _selected_close_action_value(self, event=None) -> str:
         candidates = [
@@ -822,9 +893,45 @@ class MainWindow:
         self.config.settings.home_assistant_url = home_assistant_url
         self.config.settings.home_assistant_token = home_assistant_token
 
+    def _save_settings_draft_from_fields(self, *, show_status: bool = True) -> None:
+        previous_network_signature = self._network_settings_signature()
+        previous_home_assistant = (
+            self.config.settings.home_assistant_url,
+            self.config.settings.home_assistant_token,
+        )
+        try:
+            self._apply_network_settings_from_fields()
+        except Exception as exc:
+            self._set_status(self._format_exception(exc), error=True)
+            self.page.update()
+            return
+        network_changed = self._network_settings_signature() != previous_network_signature
+        home_assistant_changed = (
+            self.config.settings.home_assistant_url,
+            self.config.settings.home_assistant_token,
+        ) != previous_home_assistant
+        if not network_changed and not home_assistant_changed:
+            return
+        if not self._persist_safe():
+            return
+        self._network_settings_dirty = self._network_settings_signature() != self._applied_network_signature
+        if show_status:
+            if self._network_settings_dirty:
+                self._set_status("Réglages sauvegardés. Clique sur 'Redémarrer le serveur' pour appliquer les changements réseau.")
+            else:
+                self._set_status("Réglages Home Assistant sauvegardés")
+        if self.active_section == "settings":
+            self._refresh_active_section()
+        self.page.update()
+
     def _apply_startup_settings_from_fields(self) -> None:
-        self.config.settings.start_minimized = bool(self.start_minimized_checkbox.value)
-        self.config.settings.start_with_windows = bool(self.start_with_windows_checkbox.value)
+        start_with_windows = bool(self.start_with_windows_checkbox.value)
+        start_minimized = bool(self.start_minimized_checkbox.value) if start_with_windows else False
+        self.start_with_windows_checkbox.value = start_with_windows
+        self.start_minimized_checkbox.value = start_minimized
+        self._sync_startup_option_controls()
+        self.config.settings.start_with_windows = start_with_windows
+        self.config.settings.start_minimized = start_minimized
 
     def _parse_port(self, raw_value: Optional[str], label: str) -> int:
         value = str(raw_value or "").strip()
@@ -850,6 +957,10 @@ class MainWindow:
         else:
             remove_startup_task()
         self.startup_path_text.value = startup_registration_label() if self.config.settings.start_with_windows else "Non activée"
+
+    def _network_settings_signature(self) -> tuple[str, int, int]:
+        settings = self.config.settings
+        return (settings.node_name, settings.api_port, settings.discovery_port)
 
     def _persist(self) -> Path:
         path = save_config(self.config)
@@ -898,5 +1009,5 @@ LauncherApp = MainWindow
 
 async def main(page: ft.Page, *, hidden: bool) -> None:
     window = MainWindow(page, hidden=hidden)
-    window.page.update()
     await window.apply_window_state()
+    window.page.update()

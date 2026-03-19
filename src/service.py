@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import json
 import threading
 import time
@@ -171,9 +172,20 @@ class LauncherService:
         self.log(f"Séquence distante '{sequence_id}' lancée sur {peer.name} ({status})")
 
     def launch_trigger_sequences(self) -> None:
+        current_boot_id = self._current_boot_id()
+        should_save = False
         for sequence in list(self.config.sequences):
+            sources: list[str] = []
             if sequence.run_on_app_start:
-                self._executor.run_sequence(sequence.clone(), source="app_start")
+                sources.append("app_start")
+            if sequence.run_once_on_boot and sequence.last_boot_run_id != current_boot_id:
+                sequence.last_boot_run_id = current_boot_id
+                should_save = True
+                sources.append("boot_once")
+            if sources:
+                self._executor.run_sequence(sequence.clone(), source="+".join(sources))
+        if should_save:
+            save_config(self.config)
 
     def _on_sequence_started(self, sequence_id: str) -> None:
         with self._lock:
@@ -203,6 +215,18 @@ class LauncherService:
         if self._on_execution_state_updated is None:
             return
         self._on_execution_state_updated()
+
+    def _current_boot_id(self) -> str:
+        uptime_seconds = 0.0
+        try:
+            if hasattr(ctypes, "windll") and getattr(ctypes.windll, "kernel32", None) is not None:
+                uptime_seconds = float(ctypes.windll.kernel32.GetTickCount64()) / 1000.0
+        except Exception:
+            uptime_seconds = 0.0
+        if uptime_seconds <= 0.0:
+            uptime_seconds = time.monotonic()
+        boot_timestamp = max(0.0, time.time() - uptime_seconds)
+        return f"boot-{int(round(boot_timestamp / 60.0))}"
 
     def _start_http_server(self) -> None:
         service = self

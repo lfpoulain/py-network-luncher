@@ -188,6 +188,8 @@ def build_sequence_list_card(*, sequence: LaunchSequence, selected: bool, subtit
         for item in subtitle.split(" | "):
             if item == "app":
                 badges.append(_build_badge(text="Auto-start", bgcolor=ft.Colors.GREEN_700))
+            elif item == "boot_once":
+                badges.append(_build_badge(text="Unique", bgcolor=ft.Colors.AMBER_700, color=ft.Colors.BLACK))
     return ft.Card(
         content=ft.Container(
             bgcolor=ft.Colors.PRIMARY_CONTAINER if selected else None,
@@ -244,6 +246,7 @@ def build_sequence_editor_header(
     *,
     sequence_name_field: ft.TextField,
     run_on_app_start_checkbox: ft.Checkbox,
+    run_once_on_boot_checkbox: ft.Checkbox,
     action_labels: Mapping[str, str],
     on_run_sequence: Callable,
     on_stop_sequence: Callable,
@@ -270,7 +273,7 @@ def build_sequence_editor_header(
                     ft.Row(
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         controls=[
-                            ft.Row(controls=[run_on_app_start_checkbox]),
+                            ft.Column(spacing=6, controls=[run_on_app_start_checkbox, run_once_on_boot_checkbox]),
                             _build_badge(text="Étapes repliées par défaut", bgcolor=ft.Colors.BLUE_GREY_700),
                         ],
                     ),
@@ -367,34 +370,34 @@ def build_settings_tab(
     return _build_section_shell(
         title="Réglages du poste",
         subtitle="Personnalise le réseau local, Windows et les intégrations externes.",
-        actions=[ft.ElevatedButton("Appliquer les réglages", icon=ft.Icons.SAVE, on_click=on_save_settings)],
+        actions=[ft.ElevatedButton("Redémarrer le serveur", icon=ft.Icons.SYNC, on_click=on_save_settings)],
         content=ft.Column(
             spacing=14,
             controls=[
                 _build_settings_group(
                     title="Réseau local",
-                    subtitle="Nom du poste et ports de communication entre machines.",
+                    subtitle="Ces valeurs sont sauvegardées automatiquement. Utilise 'Redémarrer le serveur' pour appliquer les changements réseau au service.",
                     controls=[ft.Row(spacing=10, controls=[node_name_field, api_port_field, discovery_port_field])],
                 ),
                 _build_settings_group(
                     title="Home Assistant",
-                    subtitle="Connexion utilisée par les étapes Home Assistant.",
+                    subtitle="Ces champs sont sauvegardés automatiquement quand tu quittes le champ.",
                     controls=[home_assistant_url_field, home_assistant_token_field],
                 ),
                 _build_settings_group(
                     title="Démarrage Windows",
-                    subtitle="Choisis comment l'application démarre et comment elle se ferme.",
+                    subtitle="Active le lancement avec Windows si tu veux un démarrage automatique. Le mode caché ne s'applique que dans ce cas.",
                     controls=[
-                        ft.Row(spacing=10, controls=[start_with_windows_checkbox, start_minimized_checkbox]),
+                        ft.Column(spacing=8, controls=[start_with_windows_checkbox, start_minimized_checkbox]),
                         close_action_control,
-                        ft.Text("Le démarrage Windows est mis à jour automatiquement quand tu changes les cases ci-dessus.", size=12, color=ft.Colors.OUTLINE),
+                        ft.Text("'Démarrer cachée' est une sous-option de 'Lancer automatiquement avec Windows'. Le démarrage Windows est mis à jour automatiquement quand tu changes ces cases.", size=12, color=ft.Colors.OUTLINE),
                     ],
                 ),
                 _build_settings_group(
                     title="Fichiers et configuration",
                     subtitle="Localisation des éléments utilisés par l'application.",
                     controls=[
-                        ft.Text("Le nom du poste est sauvegardé quand tu quittes le champ. Les réglages réseau et Home Assistant sont appliqués avec le bouton ci-dessus.", size=12, color=ft.Colors.OUTLINE),
+                        ft.Text("Les champs Home Assistant sont sauvegardés automatiquement. Si tu modifies le réseau, utilise 'Redémarrer le serveur' pour appliquer les changements.", size=12, color=ft.Colors.OUTLINE),
                         ft.Text("Fichier de configuration", weight=ft.FontWeight.BOLD),
                         config_path_text,
                         ft.Text("Entrée de démarrage Windows", weight=ft.FontWeight.BOLD),
@@ -418,6 +421,7 @@ def build_step_card(
     on_update_bool: Callable[[str], Callable],
     on_update_seconds: Callable,
     on_update_remote_peer: Callable,
+    on_update_remote_sequence: Callable,
     on_pick_command: Callable,
     is_collapsed: bool,
     is_running: bool,
@@ -509,10 +513,22 @@ def build_step_card(
                 if item.id == step.remote_sequence_id:
                     selected_remote_sequence = item
 
+    cached_peer_label = step.remote_peer_name.strip()
+    cached_sequence_label = step.remote_sequence_name.strip()
     if step.remote_peer_id and step.remote_peer_id not in peer_option_keys:
-        peer_options.append(ft.dropdown.Option(key=step.remote_peer_id, text=f"ID mémorisé: {step.remote_peer_id}"))
+        peer_options.append(
+            ft.dropdown.Option(
+                key=step.remote_peer_id,
+                text=f"{cached_peer_label} (hors ligne)" if cached_peer_label else f"ID mémorisé: {step.remote_peer_id}",
+            )
+        )
     if step.remote_sequence_id and step.remote_sequence_id not in remote_sequence_option_keys:
-        remote_sequence_options.append(ft.dropdown.Option(key=step.remote_sequence_id, text=f"ID mémorisé: {step.remote_sequence_id}"))
+        remote_sequence_options.append(
+            ft.dropdown.Option(
+                key=step.remote_sequence_id,
+                text=cached_sequence_label if cached_sequence_label else f"ID mémorisé: {step.remote_sequence_id}",
+            )
+        )
 
     step_summary = ""
     if step.action_type == ACTION_LAUNCH_APP:
@@ -534,8 +550,8 @@ def build_step_card(
         selected_local = next((s for s in local_sequences if s.id == step.local_sequence_id), None)
         step_summary = selected_local.name if selected_local is not None else (step.local_sequence_id.strip() or "Séquence locale non définie")
     elif step.action_type == ACTION_REMOTE_SEQUENCE:
-        selected_peer_label = selected_peer.name if selected_peer is not None else step.remote_peer_id.strip()
-        selected_sequence_label = selected_remote_sequence.name if selected_remote_sequence is not None else step.remote_sequence_id.strip()
+        selected_peer_label = selected_peer.name if selected_peer is not None else (cached_peer_label or step.remote_peer_id.strip())
+        selected_sequence_label = selected_remote_sequence.name if selected_remote_sequence is not None else (cached_sequence_label or step.remote_sequence_id.strip())
         if selected_sequence_label and selected_peer_label:
             step_summary = f"{selected_peer_label} - {selected_sequence_label}"
         else:
@@ -544,6 +560,29 @@ def build_step_card(
         action_label = HOME_ASSISTANT_ACTION_LABELS.get(step.home_assistant_action, step.home_assistant_action)
         entity_label = step.home_assistant_entity_id.strip() or "Entité non définie"
         step_summary = f"{entity_label} - {action_label}"
+
+    step_text_column = ft.Column(
+        expand=True,
+        spacing=2,
+        controls=[
+            ft.Text(
+                f"Étape {index + 1} - {action_labels[step.action_type]}",
+                size=16,
+                weight=ft.FontWeight.BOLD,
+                max_lines=1,
+                overflow=ft.TextOverflow.ELLIPSIS,
+                no_wrap=True,
+            ),
+            ft.Text(
+                step_summary,
+                size=12,
+                color=ft.Colors.OUTLINE,
+                max_lines=1,
+                overflow=ft.TextOverflow.ELLIPSIS,
+                no_wrap=True,
+            ),
+        ],
+    )
 
     leading_controls: list[ft.Control] = []
     if show_drag_handle:
@@ -573,13 +612,7 @@ def build_step_card(
                 alignment=ft.Alignment.CENTER,
                 content=ft.Icon(action_icon, color=ft.Colors.BLACK),
             ),
-            ft.Column(
-                spacing=2,
-                controls=[
-                    ft.Text(f"Étape {index + 1} - {action_labels[step.action_type]}", size=16, weight=ft.FontWeight.BOLD),
-                    ft.Text(step_summary, size=12, color=ft.Colors.OUTLINE),
-                ],
-            ),
+            step_text_column,
         ]
     )
     trailing_controls: list[ft.Control] = []
@@ -607,10 +640,13 @@ def build_step_card(
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
-                ft.Row(
-                    spacing=12,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    controls=leading_controls,
+                ft.Container(
+                    expand=True,
+                    content=ft.Row(
+                        spacing=12,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=leading_controls,
+                    ),
                 ),
                 ft.Row(spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=trailing_controls),
             ],
@@ -749,7 +785,7 @@ def build_step_card(
         fields.extend(
             [
                 ft.Dropdown(label="Poste distant", value=step.remote_peer_id or None, options=peer_options, on_select=on_update_remote_peer),
-                ft.Dropdown(label="Séquence distante", value=step.remote_sequence_id or None, options=remote_sequence_options, on_select=on_update_string("remote_sequence_id")),
+                ft.Dropdown(label="Séquence distante", value=step.remote_sequence_id or None, options=remote_sequence_options, on_select=on_update_remote_sequence),
             ]
         )
     elif step.action_type == ACTION_HOME_ASSISTANT:

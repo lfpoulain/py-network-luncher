@@ -127,7 +127,9 @@ class ActionStep:
     seconds: float = 1.0
     local_sequence_id: str = ""
     remote_peer_id: str = ""
+    remote_peer_name: str = ""
     remote_sequence_id: str = ""
+    remote_sequence_name: str = ""
     home_assistant_domain: str = HOME_ASSISTANT_DOMAIN_LIGHT
     home_assistant_entity_id: str = ""
     home_assistant_action: str = HOME_ASSISTANT_ACTION_ON
@@ -156,7 +158,9 @@ class ActionStep:
             "seconds": self.seconds,
             "local_sequence_id": self.local_sequence_id,
             "remote_peer_id": self.remote_peer_id,
+            "remote_peer_name": self.remote_peer_name,
             "remote_sequence_id": self.remote_sequence_id,
+            "remote_sequence_name": self.remote_sequence_name,
             "home_assistant_domain": self.home_assistant_domain,
             "home_assistant_entity_id": self.home_assistant_entity_id,
             "home_assistant_action": self.home_assistant_action,
@@ -215,7 +219,9 @@ class ActionStep:
             seconds=max(0.0, seconds),
             local_sequence_id=str(data.get("local_sequence_id") or ""),
             remote_peer_id=str(data.get("remote_peer_id") or ""),
+            remote_peer_name=str(data.get("remote_peer_name") or ""),
             remote_sequence_id=str(data.get("remote_sequence_id") or ""),
+            remote_sequence_name=str(data.get("remote_sequence_name") or ""),
             home_assistant_domain=home_assistant_domain,
             home_assistant_entity_id=str(data.get("home_assistant_entity_id") or ""),
             home_assistant_action=home_assistant_action,
@@ -227,6 +233,8 @@ class LaunchSequence:
     id: str = field(default_factory=lambda: new_id("sequence"))
     name: str = "Nouvelle séquence"
     run_on_app_start: bool = False
+    run_once_on_boot: bool = False
+    last_boot_run_id: str = ""
     steps: list[ActionStep] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -234,6 +242,8 @@ class LaunchSequence:
             "id": self.id,
             "name": self.name,
             "run_on_app_start": self.run_on_app_start,
+            "run_once_on_boot": self.run_once_on_boot,
+            "last_boot_run_id": self.last_boot_run_id,
             "steps": [step.to_dict() for step in self.steps],
         }
 
@@ -247,10 +257,13 @@ class LaunchSequence:
         steps_raw = data.get("steps") if isinstance(data.get("steps"), list) else []
         run_on_app_start = bool(data.get("run_on_app_start", False))
         legacy_run_on_boot = bool(data.get("run_on_boot", False))
+        run_once_on_boot = bool(data.get("run_once_on_boot", False) or data.get("run_only_once_on_boot", False))
         return cls(
             id=str(data.get("id") or new_id("sequence")),
             name=str(data.get("name") or "Nouvelle séquence"),
             run_on_app_start=run_on_app_start or legacy_run_on_boot,
+            run_once_on_boot=run_once_on_boot,
+            last_boot_run_id=str(data.get("last_boot_run_id") or ""),
             steps=[ActionStep.from_dict(item) for item in steps_raw if isinstance(item, dict)],
         )
 
