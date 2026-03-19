@@ -65,6 +65,8 @@ class MainWindow:
         self.node_name_field = ft.TextField(label="Nom du poste", expand=True)
         self.api_port_field = ft.TextField(label="Port API", width=140)
         self.discovery_port_field = ft.TextField(label="Port discovery", width=160)
+        self.home_assistant_url_field = ft.TextField(label="URL du serveur Home Assistant", expand=True)
+        self.home_assistant_token_field = ft.TextField(label="Token d'accès Home Assistant", password=True, can_reveal_password=True, expand=True)
         self.start_minimized_checkbox = ft.Checkbox(label="Démarrer cachée avec Windows")
         self.start_with_windows_checkbox = ft.Checkbox(label="Lancer avec Windows")
         self.close_action_group = ft.RadioGroup(
@@ -245,6 +247,8 @@ class MainWindow:
                 node_name_field=self.node_name_field,
                 api_port_field=self.api_port_field,
                 discovery_port_field=self.discovery_port_field,
+                home_assistant_url_field=self.home_assistant_url_field,
+                home_assistant_token_field=self.home_assistant_token_field,
                 start_with_windows_checkbox=self.start_with_windows_checkbox,
                 start_minimized_checkbox=self.start_minimized_checkbox,
                 close_action_control=self.close_action_control,
@@ -291,6 +295,8 @@ class MainWindow:
         self.node_name_field.value = settings.node_name
         self.api_port_field.value = str(settings.api_port)
         self.discovery_port_field.value = str(settings.discovery_port)
+        self.home_assistant_url_field.value = settings.home_assistant_url
+        self.home_assistant_token_field.value = settings.home_assistant_token
         self.start_minimized_checkbox.value = settings.start_minimized
         self.start_with_windows_checkbox.value = settings.start_with_windows
         self.close_action_group.value = settings.close_action
@@ -604,7 +610,7 @@ class MainWindow:
             self._apply_network_settings_from_fields()
             self._persist()
             self._restart_service()
-            self._set_status("Réglages réseau appliqués")
+            self._set_status("Réglages appliqués")
         except Exception as exc:
             self._set_status(self._format_exception(exc), error=True)
         self._refresh_runtime_section()
@@ -661,9 +667,13 @@ class MainWindow:
         node_name = (self.node_name_field.value or "Mon poste").strip() or "Mon poste"
         api_port = self._parse_port(self.api_port_field.value, "Port API")
         discovery_port = self._parse_port(self.discovery_port_field.value, "Port discovery")
+        home_assistant_url = self._normalize_home_assistant_url(self.home_assistant_url_field.value)
+        home_assistant_token = str(self.home_assistant_token_field.value or "").strip()
         self.config.settings.node_name = node_name
         self.config.settings.api_port = api_port
         self.config.settings.discovery_port = discovery_port
+        self.config.settings.home_assistant_url = home_assistant_url
+        self.config.settings.home_assistant_token = home_assistant_token
 
     def _apply_startup_settings_from_fields(self) -> None:
         self.config.settings.start_minimized = bool(self.start_minimized_checkbox.value)
@@ -678,6 +688,14 @@ class MainWindow:
         if not 1 <= port <= 65535:
             raise ValueError(f"{label} doit être compris entre 1 et 65535")
         return port
+
+    def _normalize_home_assistant_url(self, raw_value: Optional[str]) -> str:
+        value = str(raw_value or "").strip().rstrip("/")
+        if not value:
+            return ""
+        if not (value.startswith("http://") or value.startswith("https://")):
+            raise ValueError("URL Home Assistant invalide")
+        return value
 
     def _sync_startup_script(self, _=None) -> None:
         if self.config.settings.start_with_windows:

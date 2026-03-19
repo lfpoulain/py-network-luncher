@@ -2,44 +2,39 @@
 
 Application desktop Windows basée sur Flet pour construire et exécuter des séquences locales et distantes sur un réseau local.
 
-## Licence
+Py Network Launcher permet d'automatiser l'ouverture d'applications, de commandes shell, de pages web, de webhooks et de séquences distantes entre plusieurs PC Windows sur un même réseau local.
 
-Ce projet est distribué sous une licence **propriétaire non commerciale**.
+## Aperçu
 
-Usage autorisé :
+Le projet a été pensé pour les setups multi-postes où tu veux lancer plusieurs actions dans le bon ordre sans passer par des scripts compliqués.
 
-- usage personnel
-- usage interne non commercial
-- tests, démonstration, évaluation, apprentissage
+Exemples d'usage :
 
-Usage interdit sans autorisation écrite préalable :
+- lancer un environnement de stream sur un setup dual-PC
+- ouvrir un ensemble d'outils de travail ou de démo en un clic
+- réveiller un poste à distance puis démarrer une séquence dessus
+- enchaîner des actions locales et distantes sur plusieurs machines du LAN
 
-- usage commercial
-- redistribution
-- republication
-- reproduction, sauf une copie de sauvegarde strictement personnelle
+## Fonctionnalités
 
-Consulte le fichier `LICENSE` pour le texte complet.
-
-## Fonctions
-
+- séquences locales et distantes dans une même interface
 - découverte automatique des postes via beacon UDP JSON
 - API HTTP locale pour exposer les séquences d'un poste
-- séquences composées d'étapes locales et distantes
-- configuration sauvegardée en JSON dans `%USERPROFILE%\py-network-launcher.json`
-- lancement automatique avec Windows via `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+- exécution d'étapes locales, shell, web, webhook, Wake-on-LAN et distantes
+- support Home Assistant pour piloter des entités `light` et `switch`
+- lancement manuel d'une étape ou d'une séquence complète
+- exécution automatique d'une séquence au démarrage de l'application
+- démarrage automatique avec Windows
 - démarrage caché avec Windows
-- fermeture configurable :
-  - minimiser dans la zone de notification
-  - quitter réellement l'application
+- fermeture configurable : minimiser dans la zone de notification ou quitter réellement
 - system tray Windows avec actions afficher, masquer et quitter
-- interface graphique Flet pour gérer les séquences
+- configuration sauvegardée en JSON dans `%USERPROFILE%\py-network-launcher.json`
 
 ## Types d'étapes pris en charge
 
 - **Lancer une application**
   - lance un exécutable ou un programme local
-  - champs dédiés pour le chemin/commande, les arguments et le dossier de travail
+  - gère le chemin, les arguments et le dossier de travail
 - **Commande shell**
   - exécute une ligne de commande via le shell Windows
   - utile pour `cmd`, les pipes, les redirections et les commandes composées
@@ -48,16 +43,31 @@ Consulte le fichier `LICENSE` pour le texte complet.
 - **Wake-on-LAN**
 - **Délai**
 - **Lancer une séquence distante**
+- **Home Assistant**
+  - contrôle une entité `light` ou `switch` à partir de son `Entity ID`
+  - actions disponibles : `on` et `off`
 
-## Comportement des séquences
+## Utilisation
 
-- le type d'une étape est choisi à la création puis n'est plus modifiable
-- le nom affiché d'une étape est automatique et correspond à son type
+Dans l'application, tu peux :
+
+- créer plusieurs séquences locales
+- ajouter des étapes de différents types
+- choisir un mode d'attente après un lancement d'application ou de commande shell
+- lancer chaque étape individuellement
+- lancer la séquence complète à la demande
+- déclencher une séquence locale au démarrage de l'application
+
+Comportements utiles :
+
 - les étapes sont **repliées par défaut** pour garder l'éditeur lisible
-- chaque étape peut être lancée individuellement
-- les séquences peuvent être lancées manuellement ou au démarrage de l'application
+- le type d'une étape est défini à sa création
+- le comportement à la fermeture peut être réglé depuis l'onglet **Réglages**
+- les séquences distantes sont affichées avec le **nom du poste** et le **nom de la séquence**
+- les étapes Home Assistant utilisent l'URL serveur et le token configurés dans **Réglages**
+- pour Home Assistant, il suffit de saisir un `Entity ID` complet comme `light.salon` ou `switch.prise_bureau`
 
-## Modes d'attente après lancement
+### Modes d'attente disponibles
 
 Pour les étapes **Lancer une application** et **Commande shell**, plusieurs modes d'attente sont disponibles :
 
@@ -66,39 +76,6 @@ Pour les étapes **Lancer une application** et **Commande shell**, plusieurs mod
 - `Valider que l'application reste ouverte`
 - `Attendre qu'un port réponde`
 - `Attendre la fermeture`
-
-## Installation en développement
-
-```powershell
-python -m venv .venv
-\.\.venv\Scripts\Activate.ps1
-pip install -e .
-```
-
-## Lancement
-
-```powershell
-python main.py
-```
-
-Pour lancer l'application cachée au démarrage :
-
-```powershell
-python main.py --hidden
-```
-
-## Réglages du poste
-
-Depuis l'onglet **Réglages**, tu peux configurer :
-
-- le nom du poste
-- le port API HTTP local
-- le port de discovery UDP
-- le lancement automatique avec Windows
-- le démarrage caché avec Windows
-- le comportement à la fermeture
-
-Le nom du poste est sauvegardé au blur. Les réglages réseau sont appliqués avec le bouton dédié. Les options de démarrage Windows sont appliquées automatiquement.
 
 ## Fonctionnement réseau
 
@@ -109,14 +86,14 @@ Au démarrage, chaque instance :
 - écoute les autres postes découverts
 - récupère les séquences distantes publiées
 
-Par défaut :
+Ports par défaut :
 
-- API HTTP locale sur le port `8765`
-- discovery UDP sur le port `8766`
+- API HTTP locale : `8765`
+- discovery UDP : `8766`
 
-Pour que le discovery fonctionne entre plusieurs postes Windows, il faut autoriser l'application dans le pare-feu Windows sur le réseau privé. Il n'est pas nécessaire de désactiver complètement le firewall.
+Pour que la découverte fonctionne correctement entre plusieurs postes Windows, il faut autoriser l'application dans le pare-feu Windows sur le réseau privé.
 
-## Exemple de séquence
+## Exemple concret
 
 Séquence `hello` sur PC1 :
 
@@ -129,13 +106,56 @@ Séquence `stream-start` sur PC2 :
 2. attendre 10 secondes
 3. lancer la séquence `hello` sur PC1
 
+## Installation
+
+### Télécharger une version Windows
+
+Les builds Windows peuvent être publiés via les releases GitHub ou les builds CI du dépôt :
+
+- releases : `https://github.com/lfpoulain/py-network-luncher/releases`
+
+### Installation en développement
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e .
+```
+
+### Lancement local
+
+```powershell
+python main.py
+```
+
+Pour lancer l'application cachée :
+
+```powershell
+python main.py --hidden
+```
+
+## Réglages du poste
+
+Depuis l'onglet **Réglages**, tu peux configurer :
+
+- le nom du poste
+- le port API HTTP local
+- le port de discovery UDP
+- l'URL du serveur Home Assistant
+- le token d'accès Home Assistant
+- le lancement automatique avec Windows
+- le démarrage caché avec Windows
+- le comportement à la fermeture
+
+Le nom du poste est sauvegardé automatiquement. Les réglages réseau et Home Assistant sont appliqués via le bouton dédié. Les options de démarrage Windows sont appliquées automatiquement.
+
 ## Packaging Windows
 
 Le dépôt contient déjà la chaîne de packaging Windows :
 
 - `py-network-launcher.spec` pour générer l'exécutable avec PyInstaller
 - `installer\py-network-launcher.iss` pour générer un installateur Inno Setup
-- `installer\build-installer.ps1` pour enchaîner build de l'exécutable et du setup
+- `installer\build-installer.ps1` pour enchaîner le build de l'exécutable et du setup
 
 ### Pré-requis
 
@@ -157,44 +177,36 @@ Ou avec un chemin Inno Setup personnalisé :
 ### Résultat attendu
 
 - build PyInstaller dans `dist\Py Network Launcher\`
-- installateur Windows généré à partir du script Inno Setup
+- installateur Windows dans `installer\dist\PyNetworkLauncherSetup.exe`
 
-## GitHub et build automatique
+## CI GitHub Actions
 
-Le dépôt est prêt pour GitHub avec :
+Le dépôt contient un workflow GitHub Actions dans `.github/workflows/windows-build.yml`.
 
-- une licence propriétaire dans `LICENSE`
-- un workflow GitHub Actions dans `.github/workflows/windows-build.yml`
-- un `.gitignore` pour éviter de versionner la venv et les builds
-
-### Comportement du workflow GitHub Actions
-
-Le workflow Windows :
+Ce workflow :
 
 - se lance à chaque `push` sur `main` ou `master`
-- peut aussi être lancé manuellement via `workflow_dispatch`
+- peut être lancé manuellement via `workflow_dispatch`
 - installe Inno Setup sur le runner Windows
-- génère l'exécutable portable PyInstaller
-- génère l'installateur Windows Inno Setup
-- publie les artefacts du build dans GitHub Actions
-- crée une **pre-release CI** GitHub pour chaque commit poussé
+- génère une archive portable PyInstaller
+- génère un installateur Windows Inno Setup
+- publie les artefacts du build
+- crée une **pre-release CI** pour les commits poussés
 
-### Fichiers publiés par la CI
+Artefacts attendus :
 
 - `PyNetworkLauncher-portable.zip`
 - `PyNetworkLauncherSetup.exe`
 
-### Mise en ligne sur GitHub
+## Licence
 
-Après création du dépôt GitHub, tu peux publier avec la séquence classique :
+Ce projet est distribué sous une licence **propriétaire non commerciale**.
 
-```powershell
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin <URL_DU_REPO>
-git push -u origin main
-```
+Sans autorisation écrite préalable, tu ne peux pas :
 
-À partir de là, chaque nouveau commit poussé sur `main` déclenchera le build Windows automatique.
+- utiliser le logiciel à des fins commerciales
+- redistribuer le projet
+- republier le projet
+- reproduire le projet, sauf une copie de sauvegarde strictement personnelle
+
+Consulte le fichier `LICENSE` pour le texte complet.

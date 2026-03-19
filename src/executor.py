@@ -15,12 +15,15 @@ from typing import Optional
 from models import (
     ACTION_CALL_WEBHOOK,
     ACTION_DELAY,
+    ACTION_HOME_ASSISTANT,
     ACTION_LAUNCH_APP,
     ACTION_OPEN_WEBPAGE,
     ACTION_REMOTE_SEQUENCE,
     ACTION_SHELL_COMMAND,
     ACTION_WAKE_ON_LAN,
     ActionStep,
+    HOME_ASSISTANT_ACTIONS,
+    HOME_ASSISTANT_DOMAINS,
     LaunchSequence,
     WAIT_MODE_EXIT,
     WAIT_MODE_NONE,
@@ -35,9 +38,11 @@ class SequenceExecutor:
         self,
         *,
         remote_runner: Callable[[str, str], None],
+        home_assistant_config_provider: Callable[[], tuple[str, str]],
         logger: Callable[[str], None],
     ) -> None:
         self._remote_runner = remote_runner
+        self._home_assistant_config_provider = home_assistant_config_provider
         self._logger = logger
 
     def run_sequence(self, sequence: LaunchSequence, source: str = "manual") -> None:
@@ -116,6 +121,9 @@ class SequenceExecutor:
             if not step.remote_peer_id.strip():
                 raise ValueError("Poste distant manquant")
             self._remote_runner(step.remote_peer_id.strip(), step.remote_sequence_id.strip())
+            return
+        if step.action_type == ACTION_HOME_ASSISTANT:
+            self._run_home_assistant(step)
             return
         raise ValueError(f"Type d'action inconnu: {step.action_type}")
 
@@ -234,6 +242,40 @@ class SequenceExecutor:
         except ValueError as exc:
             raise RuntimeError(f"Webhook invalide: {exc}") from exc
         self._logger(f"Webhook appelé ({status})")
+
+    def _run_home_assistant(self, step: ActionStep) -> None:
+        base_url, token = self._home_assistant_config_provider()
+        base_url = str(base_url or "").strip().rstrip("/")
+        token = str(token or "").strip()
+        if not base_url:
+            raise ValueError("URL Home Assistant non configurée")
+        if not token:
+            raise ValueError("Token Home Assistant non configuré")
+        entity_id = step.home_assistant_entity_id.strip()
+        if not entity_id:
+            raise ValueError("Entity ID Home Assistant manquant")
+        domain = entity_id.split(".", 1)[0].strip().lower()
+        if domain not in HOME_ASSISTANT_DOMAINS:
+            raise ValueError("Entity ID Home Assistant invalide. Utilise un ID complet comme light.salon ou switch.prise_bureau")
+        action = step.home_assistant_action.strip().lower()
+        if action not in HOME_ASSISTANT_ACTIONS:
+            raise ValueError("Action Home Assistant invalide")
+        service_name = f"turn_{action}"
+        url = f"{base_url}/api/services/{domain}/{service_name}"
+        payload = json.dumps({"entity_id": entity_id}).encode("utf-8")
+        request = urllib.request.Request(url=url, data=payload, method="POST")
+        request.add_header("Authorization", f"Bearer {token}")
+        request.add_header("Content-Type", "application/json; charset=utf-8")
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                status = getattr(response, "status", 200)
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(f"Home Assistant HTTP {exc.code}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Home Assistant inaccessible: {exc.reason}") from exc
+        except ValueError as exc:
+            raise RuntimeError(f"Home Assistant invalide: {exc}") from exc
+        self._logger(f"Home Assistant {domain}.{service_name} envoyé pour {entity_id} ({status})")
 
     def _run_wol(self, step: ActionStep) -> None:
         mac = step.mac_address.replace(":", "").replace("-", "").strip()

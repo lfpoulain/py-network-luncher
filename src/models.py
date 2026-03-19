@@ -13,6 +13,7 @@ ACTION_CALL_WEBHOOK = "call_webhook"
 ACTION_WAKE_ON_LAN = "wake_on_lan"
 ACTION_DELAY = "delay"
 ACTION_REMOTE_SEQUENCE = "remote_sequence"
+ACTION_HOME_ASSISTANT = "home_assistant"
 
 ACTION_TYPES = (
     ACTION_LAUNCH_APP,
@@ -22,6 +23,7 @@ ACTION_TYPES = (
     ACTION_WAKE_ON_LAN,
     ACTION_DELAY,
     ACTION_REMOTE_SEQUENCE,
+    ACTION_HOME_ASSISTANT,
 )
 
 ACTION_LABELS = {
@@ -32,6 +34,33 @@ ACTION_LABELS = {
     ACTION_WAKE_ON_LAN: "Wake on LAN",
     ACTION_DELAY: "Délai",
     ACTION_REMOTE_SEQUENCE: "Séquence distante",
+    ACTION_HOME_ASSISTANT: "Home Assistant",
+}
+
+HOME_ASSISTANT_DOMAIN_LIGHT = "light"
+HOME_ASSISTANT_DOMAIN_SWITCH = "switch"
+
+HOME_ASSISTANT_DOMAINS = (
+    HOME_ASSISTANT_DOMAIN_LIGHT,
+    HOME_ASSISTANT_DOMAIN_SWITCH,
+)
+
+HOME_ASSISTANT_DOMAIN_LABELS = {
+    HOME_ASSISTANT_DOMAIN_LIGHT: "Lumière",
+    HOME_ASSISTANT_DOMAIN_SWITCH: "Switch",
+}
+
+HOME_ASSISTANT_ACTION_ON = "on"
+HOME_ASSISTANT_ACTION_OFF = "off"
+
+HOME_ASSISTANT_ACTIONS = (
+    HOME_ASSISTANT_ACTION_ON,
+    HOME_ASSISTANT_ACTION_OFF,
+)
+
+HOME_ASSISTANT_ACTION_LABELS = {
+    HOME_ASSISTANT_ACTION_ON: "On",
+    HOME_ASSISTANT_ACTION_OFF: "Off",
 }
 
 WAIT_MODE_NONE = "none"
@@ -95,6 +124,9 @@ class ActionStep:
     seconds: float = 1.0
     remote_peer_id: str = ""
     remote_sequence_id: str = ""
+    home_assistant_domain: str = HOME_ASSISTANT_DOMAIN_LIGHT
+    home_assistant_entity_id: str = ""
+    home_assistant_action: str = HOME_ASSISTANT_ACTION_ON
 
     def display_name(self) -> str:
         return ACTION_LABELS.get(self.action_type, "Étape")
@@ -120,6 +152,9 @@ class ActionStep:
             "seconds": self.seconds,
             "remote_peer_id": self.remote_peer_id,
             "remote_sequence_id": self.remote_sequence_id,
+            "home_assistant_domain": self.home_assistant_domain,
+            "home_assistant_entity_id": self.home_assistant_entity_id,
+            "home_assistant_action": self.home_assistant_action,
         }
 
     def clone(self) -> "ActionStep":
@@ -149,6 +184,12 @@ class ActionStep:
             wait_port = int(data.get("wait_port", 0))
         except Exception:
             wait_port = 0
+        home_assistant_domain = str(data.get("home_assistant_domain") or HOME_ASSISTANT_DOMAIN_LIGHT).strip().lower()
+        if home_assistant_domain not in HOME_ASSISTANT_DOMAINS:
+            home_assistant_domain = HOME_ASSISTANT_DOMAIN_LIGHT
+        home_assistant_action = str(data.get("home_assistant_action") or HOME_ASSISTANT_ACTION_ON).strip().lower()
+        if home_assistant_action not in HOME_ASSISTANT_ACTIONS:
+            home_assistant_action = HOME_ASSISTANT_ACTION_ON
         return cls(
             id=str(data.get("id") or new_id("step")),
             action_type=action_type,
@@ -169,6 +210,9 @@ class ActionStep:
             seconds=max(0.0, seconds),
             remote_peer_id=str(data.get("remote_peer_id") or ""),
             remote_sequence_id=str(data.get("remote_sequence_id") or ""),
+            home_assistant_domain=home_assistant_domain,
+            home_assistant_entity_id=str(data.get("home_assistant_entity_id") or ""),
+            home_assistant_action=home_assistant_action,
         )
 
 
@@ -217,6 +261,8 @@ class AppSettings:
     start_minimized: bool = False
     start_with_windows: bool = False
     close_action: str = CLOSE_ACTION_MINIMIZE
+    home_assistant_url: str = ""
+    home_assistant_token: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -230,6 +276,8 @@ class AppSettings:
             "start_minimized": self.start_minimized,
             "start_with_windows": self.start_with_windows,
             "close_action": self.close_action,
+            "home_assistant_url": self.home_assistant_url,
+            "home_assistant_token": self.home_assistant_token,
         }
 
     @classmethod
@@ -270,6 +318,8 @@ class AppSettings:
             start_minimized=bool(data.get("start_minimized", False)),
             start_with_windows=bool(data.get("start_with_windows", False)),
             close_action=close_action,
+            home_assistant_url=str(data.get("home_assistant_url") or ""),
+            home_assistant_token=str(data.get("home_assistant_token") or ""),
         )
 
 

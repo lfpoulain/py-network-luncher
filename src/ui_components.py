@@ -7,6 +7,7 @@ import flet as ft
 from models import (
     ACTION_CALL_WEBHOOK,
     ACTION_DELAY,
+    ACTION_HOME_ASSISTANT,
     ACTION_LAUNCH_APP,
     ACTION_OPEN_WEBPAGE,
     ACTION_REMOTE_SEQUENCE,
@@ -14,6 +15,7 @@ from models import (
     ACTION_TYPES,
     ACTION_WAKE_ON_LAN,
     ActionStep,
+    HOME_ASSISTANT_ACTION_LABELS,
     LaunchSequence,
     PeerInfo,
     WAIT_MODE_LABELS,
@@ -202,6 +204,8 @@ def build_settings_tab(
     node_name_field: ft.TextField,
     api_port_field: ft.TextField,
     discovery_port_field: ft.TextField,
+    home_assistant_url_field: ft.TextField,
+    home_assistant_token_field: ft.TextField,
     start_with_windows_checkbox: ft.Checkbox,
     start_minimized_checkbox: ft.Checkbox,
     close_action_control: ft.Control,
@@ -220,13 +224,21 @@ def build_settings_tab(
             controls=[
                 ft.Text("Réglages du poste", size=20, weight=ft.FontWeight.BOLD),
                 ft.Row(controls=[node_name_field, api_port_field, discovery_port_field]),
+                ft.Column(
+                    spacing=8,
+                    controls=[
+                        ft.Text("Home Assistant"),
+                        home_assistant_url_field,
+                        home_assistant_token_field,
+                    ],
+                ),
                 ft.Row(controls=[start_with_windows_checkbox, start_minimized_checkbox]),
                 close_action_control,
                 ft.Text("Le démarrage Windows est mis à jour automatiquement quand tu changes les cases ci-dessus."),
-                ft.Text("Le nom du poste est sauvegardé quand tu quittes le champ. Les réglages réseau sont appliqués avec le bouton ci-dessous."),
+                ft.Text("Le nom du poste est sauvegardé quand tu quittes le champ. Les réglages réseau et Home Assistant sont appliqués avec le bouton ci-dessous."),
                 ft.Row(
                     controls=[
-                        ft.ElevatedButton("Appliquer les réglages réseau", icon=ft.Icons.SAVE, on_click=on_save_settings),
+                        ft.ElevatedButton("Appliquer les réglages", icon=ft.Icons.SAVE, on_click=on_save_settings),
                     ],
                 ),
                 ft.Text("Fichier de configuration"),
@@ -300,6 +312,10 @@ def build_step_card(
             step_summary = f"{selected_peer_label} - {selected_sequence_label}"
         else:
             step_summary = selected_sequence_label or selected_peer_label or "Sélection distante non définie"
+    elif step.action_type == ACTION_HOME_ASSISTANT:
+        action_label = HOME_ASSISTANT_ACTION_LABELS.get(step.home_assistant_action, step.home_assistant_action)
+        entity_label = step.home_assistant_entity_id.strip() or "Entité non définie"
+        step_summary = f"{entity_label} - {action_label}"
 
     fields: list[ft.Control] = [
         ft.Row(
@@ -424,6 +440,19 @@ def build_step_card(
             [
                 ft.Dropdown(label="Poste distant", value=step.remote_peer_id, options=peer_options, on_select=on_update_remote_peer),
                 ft.Dropdown(label="Séquence distante", value=step.remote_sequence_id or None, options=remote_sequence_options, on_select=on_update_string("remote_sequence_id")),
+            ]
+        )
+    elif step.action_type == ACTION_HOME_ASSISTANT:
+        fields.extend(
+            [
+                ft.TextField(label="Entity ID", value=step.home_assistant_entity_id, on_change=on_update_string("home_assistant_entity_id")),
+                ft.Dropdown(
+                    label="Action",
+                    value=step.home_assistant_action,
+                    options=[ft.dropdown.Option(key=item, text=HOME_ASSISTANT_ACTION_LABELS[item]) for item in HOME_ASSISTANT_ACTION_LABELS],
+                    on_select=on_update_string("home_assistant_action"),
+                ),
+                ft.Text("Utilise un entity ID complet comme `light.salon` ou `switch.prise_bureau`. Le type est détecté automatiquement.", size=12, color=ft.Colors.OUTLINE),
             ]
         )
 

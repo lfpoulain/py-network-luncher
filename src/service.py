@@ -41,7 +41,11 @@ class LauncherService:
             on_record=self._on_discovery_record,
             logger=self.log,
         )
-        self._executor = SequenceExecutor(remote_runner=self.run_remote_sequence, logger=self.log)
+        self._executor = SequenceExecutor(
+            remote_runner=self.run_remote_sequence,
+            home_assistant_config_provider=lambda: (self.config.settings.home_assistant_url, self.config.settings.home_assistant_token),
+            logger=self.log,
+        )
 
     def start(self) -> None:
         self._stop.clear()
