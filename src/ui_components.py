@@ -24,6 +24,100 @@ from models import (
 )
 
 
+ACTION_ICONS = {
+    ACTION_LAUNCH_APP: ft.Icons.APPS,
+    ACTION_SHELL_COMMAND: ft.Icons.TERMINAL,
+    ACTION_OPEN_WEBPAGE: ft.Icons.LANGUAGE,
+    ACTION_CALL_WEBHOOK: ft.Icons.WIFI_TETHERING,
+    ACTION_WAKE_ON_LAN: ft.Icons.POWER,
+    ACTION_DELAY: ft.Icons.TIMER,
+    ACTION_REMOTE_SEQUENCE: ft.Icons.DEVICE_HUB,
+    ACTION_HOME_ASSISTANT: ft.Icons.HOME,
+}
+
+ACTION_ACCENT_COLORS = {
+    ACTION_LAUNCH_APP: ft.Colors.BLUE_300,
+    ACTION_SHELL_COMMAND: ft.Colors.DEEP_PURPLE_300,
+    ACTION_OPEN_WEBPAGE: ft.Colors.CYAN_300,
+    ACTION_CALL_WEBHOOK: ft.Colors.ORANGE_300,
+    ACTION_WAKE_ON_LAN: ft.Colors.GREEN_300,
+    ACTION_DELAY: ft.Colors.AMBER_300,
+    ACTION_REMOTE_SEQUENCE: ft.Colors.INDIGO_300,
+    ACTION_HOME_ASSISTANT: ft.Colors.PINK_300,
+}
+
+
+def _build_badge(*, text: str, bgcolor: str, color: str = ft.Colors.WHITE) -> ft.Control:
+    return ft.Container(
+        bgcolor=bgcolor,
+        border_radius=999,
+        padding=ft.padding.symmetric(horizontal=10, vertical=4),
+        content=ft.Text(text, size=11, weight=ft.FontWeight.W_600, color=color),
+    )
+
+
+def _build_section_shell(*, title: str, subtitle: str, content: ft.Control, actions: Sequence[ft.Control] | None = None) -> ft.Control:
+    header_controls: list[ft.Control] = [
+        ft.Column(
+            spacing=4,
+            expand=True,
+            controls=[
+                ft.Text(title, size=21, weight=ft.FontWeight.BOLD),
+                ft.Text(subtitle, size=12, color=ft.Colors.OUTLINE),
+            ],
+        )
+    ]
+    if actions:
+        header_controls.append(ft.Row(spacing=8, controls=list(actions)))
+    return ft.Container(
+        expand=True,
+        bgcolor=ft.Colors.SURFACE_CONTAINER,
+        border_radius=18,
+        padding=18,
+        content=ft.Column(
+            expand=True,
+            spacing=16,
+            controls=[
+                ft.Row(alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START, controls=header_controls),
+                content,
+            ],
+        ),
+    )
+
+
+def _build_empty_state(*, icon: str, title: str, subtitle: str) -> ft.Control:
+    return ft.Container(
+        padding=24,
+        border_radius=16,
+        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        content=ft.Column(
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=10,
+            controls=[
+                ft.Icon(icon, size=38, color=ft.Colors.OUTLINE),
+                ft.Text(title, size=16, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+                ft.Text(subtitle, size=12, color=ft.Colors.OUTLINE, text_align=ft.TextAlign.CENTER),
+            ],
+        ),
+    )
+
+
+def _build_settings_group(*, title: str, subtitle: str, controls: Sequence[ft.Control]) -> ft.Control:
+    return ft.Container(
+        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        border_radius=16,
+        padding=16,
+        content=ft.Column(
+            spacing=10,
+            controls=[
+                ft.Text(title, size=16, weight=ft.FontWeight.BOLD),
+                ft.Text(subtitle, size=12, color=ft.Colors.OUTLINE),
+                *controls,
+            ],
+        ),
+    )
+
+
 def build_main_layout(
     *,
     navigation_row: ft.Row,
@@ -37,24 +131,41 @@ def build_main_layout(
             ft.Row(
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 controls=[
-                    ft.Row(
-                        spacing=12,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        controls=[
-                            ft.Image(src="logo_64.png", width=40, height=40, fit=ft.BoxFit.CONTAIN),
-                            ft.Text("Py Network Launcher", size=28, weight=ft.FontWeight.BOLD),
-                        ],
+                    ft.Container(
+                        padding=ft.padding.symmetric(horizontal=16, vertical=14),
+                        border_radius=18,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER,
+                        content=ft.Row(
+                            spacing=14,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            controls=[
+                                ft.Container(
+                                    width=52,
+                                    height=52,
+                                    border_radius=14,
+                                    bgcolor=ft.Colors.PRIMARY_CONTAINER,
+                                    alignment=ft.Alignment.CENTER,
+                                    content=ft.Image(src="logo_64.png", width=34, height=34, fit=ft.BoxFit.CONTAIN),
+                                ),
+                                ft.Column(
+                                    spacing=3,
+                                    controls=[
+                                        ft.Text("Py Network Launcher", size=28, weight=ft.FontWeight.BOLD),
+                                        ft.Text("Automatisation locale et distante pour postes Windows sur le LAN.", size=12, color=ft.Colors.OUTLINE),
+                                    ],
+                                ),
+                            ],
+                        ),
                     ),
                 ],
             ),
-            ft.Text("Séquences locales et distantes avec autodiscovery LAN, webhooks, pages web, Wake-on-LAN et démarrage automatique."),
             navigation_row,
             section_container,
             ft.Container(
                 bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-                border_radius=12,
-                padding=12,
-                content=ft.Row(controls=[ft.Icon(ft.Icons.INFO_OUTLINE), status_text]),
+                border_radius=16,
+                padding=14,
+                content=ft.Row(spacing=10, controls=[ft.Icon(ft.Icons.INFO_OUTLINE), status_text]),
             ),
         ],
     )
@@ -62,54 +173,68 @@ def build_main_layout(
 
 def build_nav_button(*, key: str, label: str, selected: bool, on_click: Callable[[str], None]) -> ft.Control:
     if selected:
-        return ft.ElevatedButton(label, on_click=lambda _, section=key: on_click(section))
+        return ft.ElevatedButton(label, icon=ft.Icons.CHEVRON_RIGHT, on_click=lambda _, section=key: on_click(section))
     return ft.OutlinedButton(label, on_click=lambda _, section=key: on_click(section))
 
 
 def build_sequence_list_card(*, sequence: LaunchSequence, selected: bool, subtitle: str, on_select: Callable[[str], None]) -> ft.Control:
+    badges: list[ft.Control] = []
+    if subtitle == "manuel":
+        badges.append(_build_badge(text="Manuel", bgcolor=ft.Colors.BLUE_GREY_700))
+    else:
+        for item in subtitle.split(" | "):
+            if item == "app":
+                badges.append(_build_badge(text="Auto-start", bgcolor=ft.Colors.GREEN_700))
     return ft.Card(
         content=ft.Container(
             bgcolor=ft.Colors.PRIMARY_CONTAINER if selected else None,
-            border_radius=12,
-            content=ft.ListTile(
-                title=ft.Text(sequence.name, weight=ft.FontWeight.BOLD),
-                subtitle=ft.Text(f"{len(sequence.steps)} étape(s) - {subtitle}"),
-                leading=ft.Icon(ft.Icons.PLAYLIST_PLAY),
-                on_click=lambda _, sequence_id=sequence.id: on_select(sequence_id),
+            border_radius=16,
+            padding=16,
+            content=ft.Row(
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[
+                    ft.Container(
+                        width=42,
+                        height=42,
+                        border_radius=12,
+                        bgcolor=ft.Colors.PRIMARY if selected else ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        alignment=ft.Alignment.CENTER,
+                        content=ft.Icon(ft.Icons.PLAYLIST_PLAY, color=ft.Colors.WHITE if selected else ft.Colors.PRIMARY),
+                    ),
+                    ft.Column(
+                        expand=True,
+                        spacing=6,
+                        controls=[
+                            ft.Text(sequence.name, weight=ft.FontWeight.BOLD, size=16),
+                            ft.Text(f"{len(sequence.steps)} étape(s)", size=12, color=ft.Colors.OUTLINE),
+                            ft.Row(wrap=True, spacing=6, controls=badges),
+                        ],
+                    ),
+                    ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.OUTLINE),
+                ],
             ),
+            on_click=lambda _, sequence_id=sequence.id: on_select(sequence_id),
         ),
     )
 
 
 def build_sequences_tab(*, sequence_list_column: ft.Column, sequence_editor_column: ft.Column, on_add_sequence: Callable) -> ft.Control:
-    left = ft.Container(
-        expand=1,
-        bgcolor=ft.Colors.SURFACE_CONTAINER,
-        border_radius=16,
-        padding=16,
+    left = _build_section_shell(
+        title="Séquences locales",
+        subtitle="Organise tes scénarios et déclenche-les à la demande ou au démarrage.",
+        actions=[ft.ElevatedButton("Ajouter", icon=ft.Icons.ADD, on_click=on_add_sequence)],
         content=ft.Column(
             expand=True,
             spacing=12,
-            controls=[
-                ft.Row(
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    controls=[
-                        ft.Text("Séquences locales", size=20, weight=ft.FontWeight.BOLD),
-                        ft.ElevatedButton("Ajouter", icon=ft.Icons.ADD, on_click=on_add_sequence),
-                    ],
-                ),
-                sequence_list_column,
-            ],
+            controls=[sequence_list_column],
         ),
     )
-    right = ft.Container(
-        expand=2,
-        bgcolor=ft.Colors.SURFACE_CONTAINER,
-        border_radius=16,
-        padding=16,
+    right = _build_section_shell(
+        title="Éditeur de séquence",
+        subtitle="Sélectionne une séquence pour modifier ses étapes, son ordre et son comportement.",
         content=sequence_editor_column,
     )
-    return ft.Row(expand=True, vertical_alignment=ft.CrossAxisAlignment.START, controls=[left, right])
+    return ft.Row(expand=True, spacing=16, vertical_alignment=ft.CrossAxisAlignment.START, controls=[left, right])
 
 
 def build_sequence_editor_header(
@@ -122,18 +247,40 @@ def build_sequence_editor_header(
     on_add_step: Callable[[str], None],
 ) -> list[ft.Control]:
     return [
-        ft.Row(
-            controls=[
-                sequence_name_field,
-                ft.ElevatedButton("Lancer", icon=ft.Icons.PLAY_ARROW, on_click=on_run_sequence),
-                ft.OutlinedButton("Supprimer", icon=ft.Icons.DELETE, on_click=on_delete_sequence),
-            ]
+        ft.Container(
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border_radius=16,
+            padding=16,
+            content=ft.Column(
+                spacing=12,
+                controls=[
+                    ft.Row(
+                        controls=[
+                            sequence_name_field,
+                            ft.ElevatedButton("Lancer", icon=ft.Icons.PLAY_ARROW, on_click=on_run_sequence),
+                            ft.OutlinedButton("Supprimer", icon=ft.Icons.DELETE, on_click=on_delete_sequence),
+                        ]
+                    ),
+                    ft.Row(
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        controls=[
+                            ft.Row(controls=[run_on_app_start_checkbox]),
+                            _build_badge(text="Étapes repliées par défaut", bgcolor=ft.Colors.BLUE_GREY_700),
+                        ],
+                    ),
+                ],
+            ),
         ),
-        ft.Row(controls=[run_on_app_start_checkbox]),
         ft.Row(
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             controls=[
-                ft.Text("Étapes", size=18, weight=ft.FontWeight.BOLD),
+                ft.Column(
+                    spacing=2,
+                    controls=[
+                        ft.Text("Étapes", size=18, weight=ft.FontWeight.BOLD),
+                        ft.Text("Ajoute des actions locales, distantes ou Home Assistant.", size=12, color=ft.Colors.OUTLINE),
+                    ],
+                ),
                 ft.PopupMenuButton(
                     icon=ft.Icons.ADD,
                     items=[
@@ -147,19 +294,13 @@ def build_sequence_editor_header(
 
 
 def build_peers_tab(*, peer_column: ft.Column) -> ft.Control:
-    return ft.Container(
-        expand=True,
-        bgcolor=ft.Colors.SURFACE_CONTAINER,
-        border_radius=16,
-        padding=16,
+    return _build_section_shell(
+        title="Pairs découverts",
+        subtitle="Machines visibles sur le réseau local avec leurs séquences publiées.",
         content=ft.Column(
             expand=True,
-            controls=[
-                ft.Row(
-                    controls=[ft.Text("Pairs découverts", size=20, weight=ft.FontWeight.BOLD)],
-                ),
-                peer_column,
-            ],
+            spacing=12,
+            controls=[peer_column],
         ),
     )
 
@@ -167,13 +308,23 @@ def build_peers_tab(*, peer_column: ft.Column) -> ft.Control:
 def build_peer_card(*, peer: PeerInfo, sequence_names: str) -> ft.Control:
     return ft.Card(
         content=ft.Container(
-            padding=12,
+            padding=16,
+            border_radius=16,
             content=ft.Column(
-                spacing=6,
+                spacing=10,
                 controls=[
-                    ft.Text(peer.name, size=18, weight=ft.FontWeight.BOLD),
-                    ft.Text(f"{peer.host}:{peer.port}"),
-                    ft.Text(f"ID: {peer.node_id}"),
+                    ft.Row(
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        controls=[
+                            ft.Text(peer.name, size=18, weight=ft.FontWeight.BOLD),
+                            _build_badge(text="En ligne", bgcolor=ft.Colors.GREEN_700),
+                        ],
+                    ),
+                    ft.Row(wrap=True, spacing=8, controls=[
+                        _build_badge(text=f"{peer.host}:{peer.port}", bgcolor=ft.Colors.BLUE_GREY_700),
+                        _build_badge(text=f"{len(peer.sequences)} séquence(s)", bgcolor=ft.Colors.INDIGO_700),
+                    ]),
+                    ft.Text(f"ID: {peer.node_id}", size=12, color=ft.Colors.OUTLINE),
                     ft.Text(f"Séquences: {sequence_names}"),
                 ],
             ),
@@ -182,19 +333,13 @@ def build_peer_card(*, peer: PeerInfo, sequence_names: str) -> ft.Control:
 
 
 def build_logs_tab(*, log_list: ft.ListView) -> ft.Control:
-    return ft.Container(
-        expand=True,
-        bgcolor=ft.Colors.SURFACE_CONTAINER,
-        border_radius=16,
-        padding=16,
+    return _build_section_shell(
+        title="Historique",
+        subtitle="Suivi des lancements, des erreurs et des échanges réseau récents.",
         content=ft.Column(
             expand=True,
-            controls=[
-                ft.Row(
-                    controls=[ft.Text("Historique", size=20, weight=ft.FontWeight.BOLD)],
-                ),
-                log_list,
-            ],
+            spacing=12,
+            controls=[log_list],
         ),
     )
 
@@ -213,38 +358,43 @@ def build_settings_tab(
     startup_path_text: ft.Text,
     on_save_settings: Callable,
 ) -> ft.Control:
-    return ft.Container(
-        expand=True,
-        bgcolor=ft.Colors.SURFACE_CONTAINER,
-        border_radius=16,
-        padding=16,
+    return _build_section_shell(
+        title="Réglages du poste",
+        subtitle="Personnalise le réseau local, Windows et les intégrations externes.",
+        actions=[ft.ElevatedButton("Appliquer les réglages", icon=ft.Icons.SAVE, on_click=on_save_settings)],
         content=ft.Column(
-            expand=True,
             spacing=14,
             controls=[
-                ft.Text("Réglages du poste", size=20, weight=ft.FontWeight.BOLD),
-                ft.Row(controls=[node_name_field, api_port_field, discovery_port_field]),
-                ft.Column(
-                    spacing=8,
+                _build_settings_group(
+                    title="Réseau local",
+                    subtitle="Nom du poste et ports de communication entre machines.",
+                    controls=[ft.Row(spacing=10, controls=[node_name_field, api_port_field, discovery_port_field])],
+                ),
+                _build_settings_group(
+                    title="Home Assistant",
+                    subtitle="Connexion utilisée par les étapes Home Assistant.",
+                    controls=[home_assistant_url_field, home_assistant_token_field],
+                ),
+                _build_settings_group(
+                    title="Démarrage Windows",
+                    subtitle="Choisis comment l'application démarre et comment elle se ferme.",
                     controls=[
-                        ft.Text("Home Assistant"),
-                        home_assistant_url_field,
-                        home_assistant_token_field,
+                        ft.Row(spacing=10, controls=[start_with_windows_checkbox, start_minimized_checkbox]),
+                        close_action_control,
+                        ft.Text("Le démarrage Windows est mis à jour automatiquement quand tu changes les cases ci-dessus.", size=12, color=ft.Colors.OUTLINE),
                     ],
                 ),
-                ft.Row(controls=[start_with_windows_checkbox, start_minimized_checkbox]),
-                close_action_control,
-                ft.Text("Le démarrage Windows est mis à jour automatiquement quand tu changes les cases ci-dessus."),
-                ft.Text("Le nom du poste est sauvegardé quand tu quittes le champ. Les réglages réseau et Home Assistant sont appliqués avec le bouton ci-dessous."),
-                ft.Row(
+                _build_settings_group(
+                    title="Fichiers et configuration",
+                    subtitle="Localisation des éléments utilisés par l'application.",
                     controls=[
-                        ft.ElevatedButton("Appliquer les réglages", icon=ft.Icons.SAVE, on_click=on_save_settings),
+                        ft.Text("Le nom du poste est sauvegardé quand tu quittes le champ. Les réglages réseau et Home Assistant sont appliqués avec le bouton ci-dessus.", size=12, color=ft.Colors.OUTLINE),
+                        ft.Text("Fichier de configuration", weight=ft.FontWeight.BOLD),
+                        config_path_text,
+                        ft.Text("Entrée de démarrage Windows", weight=ft.FontWeight.BOLD),
+                        startup_path_text,
                     ],
                 ),
-                ft.Text("Fichier de configuration"),
-                config_path_text,
-                ft.Text("Entrée de démarrage Windows"),
-                startup_path_text,
             ],
         ),
     )
@@ -263,11 +413,16 @@ def build_step_card(
     on_update_remote_peer: Callable,
     on_pick_command: Callable,
     is_collapsed: bool,
+    is_running: bool,
+    is_completed: bool,
+    show_drag_handle: bool,
     on_toggle_collapse: Callable,
     on_run_step: Callable,
     on_remove_step: Callable,
     on_move_step: Callable[[int], Callable],
 ) -> ft.Control:
+    accent_color = ACTION_ACCENT_COLORS.get(step.action_type, ft.Colors.PRIMARY)
+    action_icon = ACTION_ICONS.get(step.action_type, ft.Icons.PLAY_ARROW)
     peer_options = [ft.dropdown.Option(key="", text="")]
     remote_sequence_options: list[ft.dropdown.Option] = []
     peer_option_keys = {""}
@@ -317,42 +472,85 @@ def build_step_card(
         entity_label = step.home_assistant_entity_id.strip() or "Entité non définie"
         step_summary = f"{entity_label} - {action_label}"
 
+    leading_controls: list[ft.Control] = []
+    if show_drag_handle:
+        leading_controls.append(
+            ft.ReorderableDragHandle(
+                content=ft.Icon(ft.Icons.DRAG_INDICATOR, color=ft.Colors.OUTLINE),
+                mouse_cursor=ft.MouseCursor.GRAB,
+            )
+        )
+    leading_controls.extend(
+        [
+            ft.IconButton(
+                icon=ft.Icons.CHEVRON_RIGHT if is_collapsed else ft.Icons.EXPAND_MORE,
+                tooltip="Replier / déplier",
+                on_click=on_toggle_collapse,
+            ),
+            ft.Container(
+                width=40,
+                height=40,
+                border_radius=12,
+                bgcolor=accent_color,
+                alignment=ft.Alignment.CENTER,
+                content=ft.Icon(action_icon, color=ft.Colors.BLACK),
+            ),
+            ft.Column(
+                spacing=2,
+                controls=[
+                    ft.Text(f"Étape {index + 1} - {action_labels[step.action_type]}", size=16, weight=ft.FontWeight.BOLD),
+                    ft.Text(step_summary, size=12, color=ft.Colors.OUTLINE),
+                ],
+            ),
+        ]
+    )
+    trailing_controls: list[ft.Control] = []
+    if is_running:
+        trailing_controls.append(_build_badge(text="En attente", bgcolor=ft.Colors.ORANGE_700))
+    elif is_completed:
+        trailing_controls.append(ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400))
+    trailing_controls.extend(
+        [
+            ft.IconButton(icon=ft.Icons.PLAY_ARROW, tooltip="Lancer l'étape", on_click=on_run_step),
+            ft.IconButton(icon=ft.Icons.ARROW_UPWARD, tooltip="Monter", on_click=on_move_step(-1)),
+            ft.IconButton(icon=ft.Icons.ARROW_DOWNWARD, tooltip="Descendre", on_click=on_move_step(1)),
+            ft.IconButton(icon=ft.Icons.DELETE, tooltip="Supprimer", on_click=on_remove_step),
+        ]
+    )
+
+    state_border = None
+    if is_running:
+        state_border = ft.border.all(2, ft.Colors.ORANGE_400)
+    elif is_completed:
+        state_border = ft.border.all(2, ft.Colors.GREEN_400)
+
     fields: list[ft.Control] = [
         ft.Row(
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 ft.Row(
-                    spacing=8,
+                    spacing=12,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    controls=[
-                        ft.IconButton(
-                            icon=ft.Icons.CHEVRON_RIGHT if is_collapsed else ft.Icons.EXPAND_MORE,
-                            on_click=on_toggle_collapse,
-                        ),
-                        ft.Column(
-                            spacing=2,
-                            controls=[
-                                ft.Text(f"Étape {index + 1} - {action_labels[step.action_type]}", size=16, weight=ft.FontWeight.BOLD),
-                                ft.Text(step_summary, size=12, color=ft.Colors.OUTLINE),
-                            ],
-                        ),
-                    ],
+                    controls=leading_controls,
                 ),
-                ft.Row(
-                    spacing=4,
-                    controls=[
-                        ft.TextButton("Lancer", icon=ft.Icons.PLAY_ARROW, on_click=on_run_step),
-                        ft.IconButton(icon=ft.Icons.ARROW_UPWARD, on_click=on_move_step(-1)),
-                        ft.IconButton(icon=ft.Icons.ARROW_DOWNWARD, on_click=on_move_step(1)),
-                        ft.IconButton(icon=ft.Icons.DELETE, on_click=on_remove_step),
-                    ],
-                ),
+                ft.Row(spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=trailing_controls),
             ],
         ),
     ]
 
     if is_collapsed:
-        return ft.Card(content=ft.Container(padding=12, content=ft.Column(spacing=10, controls=fields)))
+        return ft.Container(
+            key=step.id,
+            content=ft.Card(
+                content=ft.Container(
+                    padding=14,
+                    border_radius=16,
+                    border=state_border,
+                    content=ft.Column(spacing=10, controls=fields),
+                )
+            ),
+        )
 
     if step.action_type == ACTION_LAUNCH_APP:
         fields.extend(
@@ -456,4 +654,14 @@ def build_step_card(
             ]
         )
 
-    return ft.Card(content=ft.Container(padding=12, content=ft.Column(spacing=10, controls=fields)))
+    return ft.Container(
+        key=step.id,
+        content=ft.Card(
+            content=ft.Container(
+                padding=14,
+                border_radius=16,
+                border=state_border,
+                content=ft.Column(spacing=12, controls=fields),
+            )
+        ),
+    )

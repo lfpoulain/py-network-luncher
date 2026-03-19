@@ -39,10 +39,18 @@ class SequenceExecutor:
         *,
         remote_runner: Callable[[str, str], None],
         home_assistant_config_provider: Callable[[], tuple[str, str]],
+        on_sequence_started: Callable[[str], None],
+        on_step_started: Callable[[str, str], None],
+        on_step_completed: Callable[[str, str], None],
+        on_sequence_finished: Callable[[str], None],
         logger: Callable[[str], None],
     ) -> None:
         self._remote_runner = remote_runner
         self._home_assistant_config_provider = home_assistant_config_provider
+        self._on_sequence_started = on_sequence_started
+        self._on_step_started = on_step_started
+        self._on_step_completed = on_step_completed
+        self._on_sequence_finished = on_sequence_finished
         self._logger = logger
 
     def run_sequence(self, sequence: LaunchSequence, source: str = "manual") -> None:
@@ -69,13 +77,18 @@ class SequenceExecutor:
 
     def _run_sequence_worker(self, sequence: LaunchSequence, source: str) -> None:
         self._logger(f"Début de la séquence '{sequence.name}' ({source})")
+        self._on_sequence_started(sequence.id)
         try:
             for index, step in enumerate(sequence.steps, start=1):
                 self._logger(f"Étape {index}/{len(sequence.steps)}: {step.display_name()}")
+                self._on_step_started(sequence.id, step.id)
                 self._run_step(step)
+                self._on_step_completed(sequence.id, step.id)
             self._logger(f"Séquence '{sequence.name}' terminée")
         except Exception as exc:
             self._logger(f"Séquence '{sequence.name}' en erreur: {exc}")
+        finally:
+            self._on_sequence_finished(sequence.id)
 
     def _run_step_worker(self, step: ActionStep, source: str) -> None:
         step_name = step.display_name()

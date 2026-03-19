@@ -22,6 +22,7 @@ from ui_components import (
     build_sequences_tab,
     build_settings_tab,
     build_step_card,
+    _build_empty_state,
 )
 from models import (
     ACTION_LABELS,
@@ -52,21 +53,26 @@ class MainWindow:
         self._quitting = False
         self._shutdown_registered = False
         self._peer_refresh_pending = False
+        self._execution_refresh_pending = False
         self._startup_warning: Optional[str] = None
         self._tray_warning: Optional[str] = None
         self.config = self._load_initial_config()
         self._collapsed_step_ids: set[str] = {step.id for sequence in self.config.sequences for step in sequence.steps}
-        self.service = LauncherService(self.config, on_peers_updated=self._schedule_peer_refresh)
+        self.service = LauncherService(
+            self.config,
+            on_peers_updated=self._schedule_peer_refresh,
+            on_execution_state_updated=self._schedule_execution_refresh,
+        )
         self.tray_icon_path = app_icon_path()
         self.system_tray: Optional[SystemTrayController] = None
         self.selected_sequence_id: Optional[str] = self.config.sequences[0].id if self.config.sequences else None
         self.active_section = "sequences"
 
-        self.node_name_field = ft.TextField(label="Nom du poste", expand=True)
+        self.node_name_field = ft.TextField(label="Nom du poste", width=360)
         self.api_port_field = ft.TextField(label="Port API", width=140)
         self.discovery_port_field = ft.TextField(label="Port discovery", width=160)
-        self.home_assistant_url_field = ft.TextField(label="URL du serveur Home Assistant", expand=True)
-        self.home_assistant_token_field = ft.TextField(label="Token d'accès Home Assistant", password=True, can_reveal_password=True, expand=True)
+        self.home_assistant_url_field = ft.TextField(label="URL du serveur Home Assistant", width=460)
+        self.home_assistant_token_field = ft.TextField(label="Token d'accès Home Assistant", password=True, can_reveal_password=True, width=460)
         self.start_minimized_checkbox = ft.Checkbox(label="Démarrer cachée avec Windows")
         self.start_with_windows_checkbox = ft.Checkbox(label="Lancer avec Windows")
         self.close_action_group = ft.RadioGroup(
@@ -90,7 +96,7 @@ class MainWindow:
         self.run_on_app_start_checkbox = ft.Checkbox(label="Lancer au démarrage de l'application")
 
         self.sequence_list_column = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, expand=True)
-        self.sequence_editor_column = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
+        self.sequence_editor_column = ft.Column(spacing=12, expand=True)
         self.peer_column = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
         self.log_list = ft.ListView(spacing=6, auto_scroll=True, expand=True)
         self.status_text = ft.Text(value="Prêt")
@@ -315,43 +321,124 @@ class MainWindow:
                 build_sequence_list_card(sequence=sequence, selected=selected, subtitle=subtitle, on_select=self._select_sequence)
             )
         if not self.config.sequences:
-            self.sequence_list_column.controls.append(ft.Text("Aucune séquence"))
+            self.sequence_list_column.controls.append(
+                _build_empty_state(
+                    icon=ft.Icons.PLAYLIST_ADD,
+                    title="Aucune séquence",
+                    subtitle="Ajoute une première séquence pour commencer à automatiser ton poste.",
+                )
+            )
 
     def _refresh_sequence_editor(self) -> None:
         self.sequence_editor_column.controls.clear()
         sequence = self._selected_sequence()
         if sequence is None:
-            self.sequence_editor_column.controls.append(ft.Text("Sélectionnez ou créez une séquence."))
+            self.sequence_editor_column.controls.append(
+                _build_empty_state(
+                    icon=ft.Icons.EDIT_NOTE,
+                    title="Sélectionne une séquence",
+                    subtitle="Choisis une séquence à gauche ou crée-en une nouvelle pour modifier ses étapes.",
+                )
+            )
             return
         self.sequence_name_field.value = sequence.name
         self.run_on_app_start_checkbox.value = sequence.run_on_app_start
-        self.sequence_editor_column.controls.extend(
-            build_sequence_editor_header(
-                sequence_name_field=self.sequence_name_field,
-                run_on_app_start_checkbox=self.run_on_app_start_checkbox,
-                action_labels=ACTION_LABELS,
-                on_run_sequence=self._run_selected_sequence,
-                on_delete_sequence=self._delete_selected_sequence,
-                on_add_step=self._add_step,
-            )
+        header_controls = build_sequence_editor_header(
+            sequence_name_field=self.sequence_name_field,
+            run_on_app_start_checkbox=self.run_on_app_start_checkbox,
+            action_labels=ACTION_LABELS,
+            on_run_sequence=self._run_selected_sequence,
+            on_delete_sequence=self._delete_selected_sequence,
+            on_add_step=self._add_step,
         )
         if not sequence.steps:
-            self.sequence_editor_column.controls.append(ft.Text("Aucune étape dans cette séquence."))
-        for index, step in enumerate(sequence.steps):
-            self.sequence_editor_column.controls.append(self._build_step_card(sequence, step, index))
+            self.sequence_editor_column.controls.extend(header_controls)
+            self.sequence_editor_column.controls.append(
+                _build_empty_state(
+                    icon=ft.Icons.ADD_TASK,
+                    title="Aucune étape",
+                    subtitle="Ajoute une première étape pour définir le comportement de cette séquence.",
+                )
+            )
+            return
+
+        def handle_step_reorder(event: ft.OnReorderEvent) -> None:
+            old_index = int(event.old_index or 0)
+            new_index = int(event.new_index or 0)
+            if old_index < new_index:
+                new_index -= 1
+            if not 0 <= old_index < len(sequence.steps):
+                return
+            new_index = max(0, min(len(sequence.steps) - 1, new_index))
+            if new_index == old_index:
+                return
+            sequence.steps.insert(new_index, sequence.steps.pop(old_index))
+            if self._persist_safe():
+                self._refresh_sequence_editor()
+                self.page.update()
+
+        active_step_id = self.service.get_active_step_id(sequence.id)
+        completed_step_ids = self.service.get_completed_step_ids(sequence.id)
+        step_controls = [
+            self._build_step_card(
+                sequence,
+                step,
+                index,
+                is_running=step.id == active_step_id,
+                is_completed=step.id in completed_step_ids,
+                show_drag_handle=len(sequence.steps) > 1,
+            )
+            for index, step in enumerate(sequence.steps)
+        ]
+        self.sequence_editor_column.controls.append(
+            ft.ReorderableListView(
+                expand=True,
+                build_controls_on_demand=False,
+                spacing=12,
+                padding=0,
+                show_default_drag_handles=False,
+                header=ft.Column(spacing=12, controls=header_controls),
+                controls=step_controls,
+                on_reorder=handle_step_reorder,
+            )
+        )
 
     def _refresh_peers(self) -> None:
         peers = self.service.get_peers()
         self.peer_column.controls.clear()
         if not peers:
-            self.peer_column.controls.append(ft.Text("Aucun pair découvert pour l'instant."))
+            self.peer_column.controls.append(
+                _build_empty_state(
+                    icon=ft.Icons.DEVICES,
+                    title="Aucun pair découvert",
+                    subtitle="Les autres postes apparaîtront ici dès qu'ils seront détectés sur le réseau local.",
+                )
+            )
             return
         for peer in peers:
             sequence_names = ", ".join(item.name for item in peer.sequences) if peer.sequences else "Aucune séquence annoncée"
             self.peer_column.controls.append(build_peer_card(peer=peer, sequence_names=sequence_names))
 
     def _refresh_logs(self) -> None:
-        self.log_list.controls = [ft.Text(line) for line in self.service.logs()[-200:]]
+        lines = self.service.logs()[-200:]
+        if not lines:
+            self.log_list.controls = [
+                _build_empty_state(
+                    icon=ft.Icons.RECEIPT_LONG,
+                    title="Historique vide",
+                    subtitle="Les événements récents de l'application s'afficheront ici.",
+                )
+            ]
+            return
+        self.log_list.controls = [
+            ft.Container(
+                padding=ft.padding.symmetric(horizontal=10, vertical=8),
+                border_radius=10,
+                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                content=ft.Text(line, selectable=True, font_family="Consolas", size=12),
+            )
+            for line in lines
+        ]
 
     def _selected_sequence(self) -> Optional[LaunchSequence]:
         if not self.selected_sequence_id:
@@ -382,6 +469,23 @@ class MainWindow:
             self.page.update()
         finally:
             self._peer_refresh_pending = False
+
+    def _schedule_execution_refresh(self) -> None:
+        if self._execution_refresh_pending:
+            return
+        self._execution_refresh_pending = True
+        try:
+            self.page.run_task(self._apply_execution_refresh)
+        except Exception:
+            self._execution_refresh_pending = False
+
+    async def _apply_execution_refresh(self) -> None:
+        try:
+            self._refresh_sequence_editor()
+            self._refresh_logs()
+            self.page.update()
+        finally:
+            self._execution_refresh_pending = False
 
     def _select_sequence(self, sequence_id: str) -> None:
         self.selected_sequence_id = sequence_id
@@ -452,7 +556,16 @@ class MainWindow:
             self._refresh_sequence_editor()
             self.page.update()
 
-    def _build_step_card(self, sequence: LaunchSequence, step: ActionStep, index: int) -> ft.Control:
+    def _build_step_card(
+        self,
+        sequence: LaunchSequence,
+        step: ActionStep,
+        index: int,
+        *,
+        is_running: bool,
+        is_completed: bool,
+        show_drag_handle: bool,
+    ) -> ft.Control:
         peers = self.service.get_peers()
 
         def update_string(attr: str):
@@ -599,6 +712,9 @@ class MainWindow:
             on_update_remote_peer=update_remote_peer,
             on_pick_command=pick_command,
             is_collapsed=step.id in self._collapsed_step_ids,
+            is_running=is_running,
+            is_completed=is_completed,
+            show_drag_handle=show_drag_handle,
             on_toggle_collapse=toggle_collapse,
             on_run_step=run_step,
             on_remove_step=remove_step,
@@ -720,7 +836,11 @@ class MainWindow:
 
     def _restart_service(self) -> None:
         self.service.stop()
-        self.service = LauncherService(self.config, on_peers_updated=self._schedule_peer_refresh)
+        self.service = LauncherService(
+            self.config,
+            on_peers_updated=self._schedule_peer_refresh,
+            on_execution_state_updated=self._schedule_execution_refresh,
+        )
         self._start_service()
 
     def _start_service(self) -> None:

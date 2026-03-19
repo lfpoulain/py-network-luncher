@@ -17,16 +17,25 @@ from storage import save_config
 
 
 class LauncherService:
-    def __init__(self, config: AppConfig, *, on_peers_updated: Optional[Callable[[], None]] = None) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        *,
+        on_peers_updated: Optional[Callable[[], None]] = None,
+        on_execution_state_updated: Optional[Callable[[], None]] = None,
+    ) -> None:
         self.config = config
         self._lock = threading.RLock()
         self._peers: dict[str, PeerInfo] = {}
         self._logs: list[str] = []
+        self._active_sequence_steps: dict[str, str] = {}
+        self._completed_sequence_steps: dict[str, set[str]] = {}
         self._http_server: Optional[ThreadingHTTPServer] = None
         self._http_thread: Optional[threading.Thread] = None
         self._refresh_thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._on_peers_updated = on_peers_updated
+        self._on_execution_state_updated = on_execution_state_updated
         self._beacon = DiscoveryBeacon(
             node_id=self.config.settings.node_id,
             node_name=self.config.settings.node_name,
@@ -44,6 +53,10 @@ class LauncherService:
         self._executor = SequenceExecutor(
             remote_runner=self.run_remote_sequence,
             home_assistant_config_provider=lambda: (self.config.settings.home_assistant_url, self.config.settings.home_assistant_token),
+            on_sequence_started=self._on_sequence_started,
+            on_step_started=self._on_step_started,
+            on_step_completed=self._on_step_completed,
+            on_sequence_finished=self._on_sequence_finished,
             logger=self.log,
         )
 
@@ -86,6 +99,14 @@ class LauncherService:
     def logs(self) -> list[str]:
         with self._lock:
             return list(self._logs)
+
+    def get_active_step_id(self, sequence_id: str) -> Optional[str]:
+        with self._lock:
+            return self._active_sequence_steps.get(sequence_id)
+
+    def get_completed_step_ids(self, sequence_id: str) -> set[str]:
+        with self._lock:
+            return set(self._completed_sequence_steps.get(sequence_id, set()))
 
     def get_sequences(self) -> list[LaunchSequence]:
         return list(self.config.sequences)
@@ -134,6 +155,32 @@ class LauncherService:
         for sequence in list(self.config.sequences):
             if sequence.run_on_app_start:
                 self._executor.run_sequence(sequence.clone(), source="app_start")
+
+    def _on_sequence_started(self, sequence_id: str) -> None:
+        with self._lock:
+            self._active_sequence_steps[sequence_id] = ""
+            self._completed_sequence_steps[sequence_id] = set()
+        self._notify_execution_state_updated()
+
+    def _on_step_started(self, sequence_id: str, step_id: str) -> None:
+        with self._lock:
+            self._active_sequence_steps[sequence_id] = step_id
+        self._notify_execution_state_updated()
+
+    def _on_step_completed(self, sequence_id: str, step_id: str) -> None:
+        with self._lock:
+            self._completed_sequence_steps.setdefault(sequence_id, set()).add(step_id)
+        self._notify_execution_state_updated()
+
+    def _on_sequence_finished(self, sequence_id: str) -> None:
+        with self._lock:
+            self._active_sequence_steps.pop(sequence_id, None)
+        self._notify_execution_state_updated()
+
+    def _notify_execution_state_updated(self) -> None:
+        if self._on_execution_state_updated is None:
+            return
+        self._on_execution_state_updated()
 
     def _start_http_server(self) -> None:
         service = self
