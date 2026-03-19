@@ -16,6 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 build = [
+  "flet-desktop==0.82.2; platform_system == 'Windows' or platform_system == 'Darwin'",
   "pyinstaller>=6,<7",
 ]
 

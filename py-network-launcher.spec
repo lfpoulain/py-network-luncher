@@ -21,7 +21,7 @@ assets_dir = project_root / "assets"
 
 flet_desktop_spec = importlib.util.find_spec("flet_desktop")
 if flet_desktop_spec is None or flet_desktop_spec.origin is None:
-    raise RuntimeError("flet_desktop package introuvable pour le packaging")
+    raise RuntimeError("flet_desktop package introuvable pour le packaging. Installe la dépendance build 'flet-desktop'.")
 flet_desktop_dir = Path(flet_desktop_spec.origin).resolve().parent
 
 hiddenimports = collect_submodules("flet") + collect_submodules("pystray") + collect_submodules("flet_desktop")
