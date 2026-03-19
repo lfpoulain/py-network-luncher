@@ -1,118 +1,157 @@
-# Py Network Launcher
+# 🚀 Py Network Launcher
 
-Application desktop Windows basée sur Flet pour construire et exécuter des séquences locales et distantes sur un réseau local.
+<p align="center">
+  <strong>Automatisation locale et distante pour postes Windows sur le même réseau local.</strong><br/>
+  Construit avec <a href="https://flet.dev">Flet</a> · Python 3.11+ · Windows
+</p>
 
-Py Network Launcher permet d'automatiser l'ouverture d'applications, de commandes shell, de pages web, de webhooks et de séquences distantes entre plusieurs PC Windows sur un même réseau local.
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-Windows-blue?logo=windows" alt="Platform: Windows"/>
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue?logo=python" alt="Python 3.11+"/>
+  <img src="https://img.shields.io/badge/UI-Flet-blueviolet" alt="Flet UI"/>
+  <img src="https://img.shields.io/badge/licence-Propriétaire%20non%20commerciale-red" alt="Licence"/>
+  <img src="https://img.shields.io/github/actions/workflow/status/lfpoulain/py-network-luncher/windows-build.yml?label=CI&logo=github" alt="CI Status"/>
+</p>
 
-## Aperçu
+---
 
-Le projet a été pensé pour les setups multi-postes où tu veux lancer plusieurs actions dans le bon ordre sans passer par des scripts compliqués.
+Py Network Launcher permet de centraliser et d'orchestrer des **séquences d'actions** sur plusieurs PC Windows d'un même réseau, sans scripts complexes ni raccourcis bricolés.
 
-Exemples d'usage :
+> **Conçu pour les setups multi-postes** : streaming dual-PC, démarrage d'environnements de travail, automatisation réseau, pilotage Home Assistant…
 
-- lancer un environnement de stream sur un setup dual-PC
-- ouvrir un ensemble d'outils de travail ou de démo en un clic
-- réveiller un poste à distance puis démarrer une séquence dessus
-- enchaîner des actions locales et distantes sur plusieurs machines du LAN
+---
 
-## Fonctionnalités
+## 📋 Table des matières
 
-- séquences locales et distantes dans une même interface
-- découverte automatique des postes via beacon UDP JSON
-- API HTTP locale pour exposer les séquences d'un poste
-- exécution d'étapes locales, shell, web, webhook, Wake-on-LAN et distantes
-- support Home Assistant pour piloter des entités `light` et `switch`
-- lancement manuel d'une étape ou d'une séquence complète
-- exécution automatique d'une séquence au démarrage de l'application
-- démarrage automatique avec Windows
-- démarrage caché avec Windows
-- fermeture configurable : minimiser dans la zone de notification ou quitter réellement
-- system tray Windows avec actions afficher, masquer et quitter
-- configuration sauvegardée en JSON dans `%USERPROFILE%\py-network-launcher.json`
+- [Cas d'usage](#-cas-dusage)
+- [Points forts](#-points-forts)
+- [Types d'étapes disponibles](#-types-détapes-disponibles)
+- [Utilisation](#-utilisation)
+- [Fonctionnement réseau](#-fonctionnement-réseau)
+- [Exemple rapide](#-exemple-rapide)
+- [Installation](#-installation)
+- [Réglages du poste](#-réglages-du-poste)
+- [Intégration Home Assistant](#-intégration-home-assistant)
+- [Packaging Windows](#-packaging-windows)
+- [CI GitHub Actions](#-ci-github-actions)
+- [Licence](#-licence)
 
-## Types d'étapes pris en charge
+---
 
-- **Lancer une application**
-  - lance un exécutable ou un programme local
-  - gère le chemin, les arguments et le dossier de travail
-- **Commande shell**
-  - exécute une ligne de commande via le shell Windows
-  - utile pour `cmd`, les pipes, les redirections et les commandes composées
-- **Ouvrir une page web**
-- **Appeler un webhook**
-- **Wake-on-LAN**
-- **Délai**
-- **Lancer une séquence distante**
-- **Home Assistant**
-  - contrôle une entité `light` ou `switch` à partir de son `Entity ID`
-  - actions disponibles : `on` et `off`
+## 🎯 Cas d'usage
 
-## Utilisation
+- Lancer un setup de stream sur un environnement **dual-PC**
+- Ouvrir un ensemble d'outils de travail ou de démo **en un clic**
+- Réveiller un poste à distance (Wake-on-LAN) puis **démarrer une séquence dessus**
+- Orchestrer plusieurs actions entre plusieurs PC Windows du même réseau
+- Piloter des équipements **Home Assistant** dans une routine de démarrage ou d'arrêt
+
+---
+
+## ✨ Points forts
+
+| Fonctionnalité | Détail |
+|---|---|
+| 🖥️ Interface unique | Séquences locales et distantes dans un seul endroit |
+| 📡 Découverte automatique | Les postes du LAN apparaissent sans configuration |
+| 🔗 API HTTP locale | Expose les séquences d'un poste aux autres machines |
+| ✏️ Éditeur visuel | Crée et modifie les étapes d'une séquence facilement |
+| 🖱️ Drag & drop | Réordonne les étapes à la volée |
+| 🟠 Suivi d'exécution | L'étape en cours est mise en évidence en temps réel |
+| ✅ Progression | Les étapes terminées sont marquées visuellement |
+| ⚡ Lancement auto | Déclenche une séquence au démarrage de l'app |
+| 🏠 Home Assistant | Pilote des entités `light` et `switch` |
+| 🔒 Config persistée | Sauvegardée en JSON dans `%USERPROFILE%\py-network-launcher.json` |
+
+---
+
+## 🧩 Types d'étapes disponibles
+
+| Type | Description |
+|---|---|
+| 🟦 **Lancer une application** | Ouvre un exécutable local avec ses arguments et son dossier de travail |
+| ⬛ **Commande shell** | Exécute une commande Windows, avec support des pipes et redirections |
+| 🌐 **Ouvrir une page web** | Ouvre une URL dans le navigateur par défaut |
+| 🔔 **Appeler un webhook** | Envoie une requête HTTP (GET, POST, PUT…) |
+| 💡 **Wake-on-LAN** | Réveille un poste distant via son adresse MAC |
+| ⏱️ **Délai** | Attend un nombre de secondes avant de passer à la suite |
+| 🔗 **Séquence distante** | Déclenche une séquence sur un autre poste du réseau |
+| 🏠 **Home Assistant** | Pilote une entité `light` ou `switch` via l'API HA |
+
+### Modes d'attente (App & Shell)
+
+Pour les étapes **Lancer une application** et **Commande shell** :
+
+| Mode | Comportement |
+|---|---|
+| `Ne pas attendre` | Passe immédiatement à la suite |
+| `Valider quand l'application est ouverte` | Attend que le processus démarre |
+| `Valider que l'application reste ouverte` | Attend que le processus soit stable |
+| `Attendre qu'un port réponde` | Attend qu'un port TCP réponde |
+| `Attendre la fermeture` | Attend la fin du processus |
+
+---
+
+## 🖱️ Utilisation
 
 Dans l'application, tu peux :
 
-- créer plusieurs séquences locales
-- ajouter des étapes de différents types
-- choisir un mode d'attente après un lancement d'application ou de commande shell
-- lancer chaque étape individuellement
-- lancer la séquence complète à la demande
-- déclencher une séquence locale au démarrage de l'application
+- Créer plusieurs **séquences** nommées
+- Ajouter des étapes de différents types
+- Tester une **étape individuellement**
+- Lancer une **séquence complète** à la demande
+- Réordonner les étapes **par drag & drop**
+- Suivre la **progression d'une séquence en direct**
+- Déclencher automatiquement une séquence **au démarrage de l'app**
 
-Comportements utiles :
+> **Astuce** : les étapes sont repliées par défaut pour garder l'éditeur lisible. Clique sur une étape pour la déplier et la modifier.
 
-- les étapes sont **repliées par défaut** pour garder l'éditeur lisible
-- le type d'une étape est défini à sa création
-- le comportement à la fermeture peut être réglé depuis l'onglet **Réglages**
-- les séquences distantes sont affichées avec le **nom du poste** et le **nom de la séquence**
-- les étapes Home Assistant utilisent l'URL serveur et le token configurés dans **Réglages**
-- pour Home Assistant, il suffit de saisir un `Entity ID` complet comme `light.salon` ou `switch.prise_bureau`
+---
 
-### Modes d'attente disponibles
+## 🌐 Fonctionnement réseau
 
-Pour les étapes **Lancer une application** et **Commande shell**, plusieurs modes d'attente sont disponibles :
+Au démarrage, chaque instance de l'application :
 
-- `Ne pas attendre`
-- `Valider quand l'application est ouverte`
-- `Valider que l'application reste ouverte`
-- `Attendre qu'un port réponde`
-- `Attendre la fermeture`
+1. Expose une **API HTTP locale**
+2. Diffuse sa présence sur le réseau local
+3. Écoute les autres postes découverts
+4. Récupère les **séquences distantes publiées**
 
-## Fonctionnement réseau
+**Ports par défaut :**
 
-Au démarrage, chaque instance :
+| Usage | Port |
+|---|---|
+| API HTTP locale | `8765` |
+| Discovery UDP | `8766` |
 
-- expose une API HTTP locale
-- diffuse sa présence sur le LAN
-- écoute les autres postes découverts
-- récupère les séquences distantes publiées
+> Pour que la découverte fonctionne entre plusieurs postes Windows, autorise l'application dans le **pare-feu Windows** sur le réseau privé.
 
-Ports par défaut :
+---
 
-- API HTTP locale : `8765`
-- discovery UDP : `8766`
+## ⚡ Exemple rapide
 
-Pour que la découverte fonctionne correctement entre plusieurs postes Windows, il faut autoriser l'application dans le pare-feu Windows sur le réseau privé.
+**Séquence `hello` sur PC1 :**
+1. Lancer Chrome
+2. Appeler un webhook
 
-## Exemple concret
+**Séquence `stream-start` sur PC2 :**
+1. Lancer OBS
+2. Attendre 10 secondes
+3. ➡️ Lancer la séquence `hello` sur PC1
 
-Séquence `hello` sur PC1 :
+---
 
-1. lancer Chrome
-2. appeler un webhook
-
-Séquence `stream-start` sur PC2 :
-
-1. lancer OBS
-2. attendre 10 secondes
-3. lancer la séquence `hello` sur PC1
-
-## Installation
+## 📦 Installation
 
 ### Télécharger une version Windows
 
-Les builds Windows peuvent être publiés via les releases GitHub ou les builds CI du dépôt :
+Les builds Windows sont disponibles via les **releases GitHub** :
 
-- releases : `https://github.com/lfpoulain/py-network-luncher/releases`
+👉 [`https://github.com/lfpoulain/py-network-luncher/releases`](https://github.com/lfpoulain/py-network-luncher/releases)
+
+Deux formats disponibles :
+- **Archive portable** (ZIP) — décompresse et lance directement
+- **Installateur** (`PyNetworkLauncherSetup.exe`) — installe dans le menu Démarrer
 
 ### Installation en développement
 
@@ -128,39 +167,62 @@ pip install -e .
 python main.py
 ```
 
-Pour lancer l'application cachée :
+Pour lancer l'application cachée dans la barre des tâches :
 
 ```powershell
 python main.py --hidden
 ```
 
-## Réglages du poste
+---
+
+## ⚙️ Réglages du poste
 
 Depuis l'onglet **Réglages**, tu peux configurer :
 
-- le nom du poste
-- le port API HTTP local
-- le port de discovery UDP
-- l'URL du serveur Home Assistant
-- le token d'accès Home Assistant
-- le lancement automatique avec Windows
-- le démarrage caché avec Windows
-- le comportement à la fermeture
+- 🏷️ Le **nom du poste** (visible sur le réseau)
+- 🔌 Le **port API HTTP** local
+- 📡 Le **port de discovery** UDP
+- 🏠 L'**URL du serveur Home Assistant**
+- 🔑 Le **token d'accès Home Assistant**
+- 🪟 Le **lancement automatique avec Windows**
+- 🙈 Le **démarrage caché** avec Windows
+- 🚪 Le **comportement à la fermeture** (minimiser ou quitter)
 
-Le nom du poste est sauvegardé automatiquement. Les réglages réseau et Home Assistant sont appliqués via le bouton dédié. Les options de démarrage Windows sont appliquées automatiquement.
+> Le nom du poste est sauvegardé automatiquement. Les réglages réseau et Home Assistant sont appliqués via le bouton **Appliquer les réglages**.
 
-## Packaging Windows
+---
 
-Le dépôt contient déjà la chaîne de packaging Windows :
+## 🏠 Intégration Home Assistant
 
-- `py-network-launcher.spec` pour générer l'exécutable avec PyInstaller
-- `installer\py-network-launcher.iss` pour générer un installateur Inno Setup
-- `installer\build-installer.ps1` pour enchaîner le build de l'exécutable et du setup
+Configure l'URL et le token dans **Réglages**, puis ajoute une étape **Home Assistant** dans une séquence.
+
+**Il suffit d'indiquer un `Entity ID` complet :**
+
+```
+light.salon
+switch.prise_bureau
+```
+
+Le domaine (`light`, `switch`) est détecté automatiquement depuis l'ID.
+
+**Actions disponibles :** `on` · `off`
+
+---
+
+## 🔨 Packaging Windows
+
+Le dépôt contient une chaîne de packaging complète :
+
+| Fichier | Rôle |
+|---|---|
+| `py-network-launcher.spec` | Génère l'exécutable avec PyInstaller |
+| `installer\py-network-launcher.iss` | Génère l'installateur avec Inno Setup |
+| `installer\build-installer.ps1` | Enchaîne les deux étapes |
 
 ### Pré-requis
 
-- Python 3.11+
-- Inno Setup 6 installé, avec `ISCC.exe` disponible
+- Python **3.11+**
+- [Inno Setup 6](https://jrsoftware.org/isinfo.php) avec `ISCC.exe` disponible
 
 ### Générer l'exécutable et l'installateur
 
@@ -168,45 +230,50 @@ Le dépôt contient déjà la chaîne de packaging Windows :
 .\installer\build-installer.ps1
 ```
 
-Ou avec un chemin Inno Setup personnalisé :
+Avec un chemin Python ou Inno Setup personnalisé :
 
 ```powershell
-.\installer\build-installer.ps1 -Python ".\.venv\Scripts\python.exe" -IsccPath "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+.\installer\build-installer.ps1 `
+  -Python ".\.venv\Scripts\python.exe" `
+  -IsccPath "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 ```
 
-### Résultat attendu
+**Résultat :**
 
-- build PyInstaller dans `dist\Py Network Launcher\`
-- installateur Windows dans `installer\dist\PyNetworkLauncherSetup.exe`
+- Exécutable portable → `dist\Py Network Launcher\`
+- Installateur Windows → `installer\dist\PyNetworkLauncherSetup.exe`
 
-## CI GitHub Actions
+---
 
-Le dépôt contient un workflow GitHub Actions dans `.github/workflows/windows-build.yml`.
+## 🤖 CI GitHub Actions
 
-Ce workflow :
+Le workflow `.github/workflows/windows-build.yml` se déclenche automatiquement à chaque `push` sur `main` ou `master`.
 
-- se lance à chaque `push` sur `main` ou `master`
-- peut être lancé manuellement via `workflow_dispatch`
-- installe Inno Setup sur le runner Windows
-- génère une archive portable PyInstaller
-- génère un installateur Windows Inno Setup
-- publie les artefacts du build
-- crée une **pre-release CI** pour les commits poussés
+**Ce que fait le workflow :**
 
-Artefacts attendus :
+1. Installe Inno Setup sur un runner Windows
+2. Construit l'exécutable avec PyInstaller
+3. Génère l'installateur Inno Setup
+4. Publie les artefacts du build
+5. Crée une **pre-release CI** avec les deux fichiers
 
-- `PyNetworkLauncher-portable.zip`
-- `PyNetworkLauncherSetup.exe`
+**Artefacts publiés :**
 
-## Licence
+| Fichier | Format |
+|---|---|
+| `PyNetworkLauncher-portable.zip` | Archive portable |
+| `PyNetworkLauncherSetup.exe` | Installateur Windows |
 
-Ce projet est distribué sous une licence **propriétaire non commerciale**.
+---
 
-Sans autorisation écrite préalable, tu ne peux pas :
+## 📄 Licence
 
-- utiliser le logiciel à des fins commerciales
-- redistribuer le projet
-- republier le projet
-- reproduire le projet, sauf une copie de sauvegarde strictement personnelle
+Ce projet est distribué sous une **licence propriétaire non commerciale**.
 
-Consulte le fichier `LICENSE` pour le texte complet.
+Sans autorisation écrite préalable, il est interdit de :
+
+- Utiliser le logiciel à des **fins commerciales**
+- **Redistribuer** ou **republier** le projet
+- **Reproduire** le projet, sauf une copie de sauvegarde strictement personnelle
+
+Consulte le fichier [`LICENSE`](LICENSE) pour le texte complet.
