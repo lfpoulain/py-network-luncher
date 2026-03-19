@@ -9,6 +9,7 @@ from models import (
     ACTION_DELAY,
     ACTION_HOME_ASSISTANT,
     ACTION_LAUNCH_APP,
+    ACTION_LOCAL_SEQUENCE,
     ACTION_OPEN_WEBPAGE,
     ACTION_REMOTE_SEQUENCE,
     ACTION_SHELL_COMMAND,
@@ -31,6 +32,7 @@ ACTION_ICONS = {
     ACTION_CALL_WEBHOOK: ft.Icons.WIFI_TETHERING,
     ACTION_WAKE_ON_LAN: ft.Icons.POWER,
     ACTION_DELAY: ft.Icons.TIMER,
+    ACTION_LOCAL_SEQUENCE: ft.Icons.REPEAT,
     ACTION_REMOTE_SEQUENCE: ft.Icons.DEVICE_HUB,
     ACTION_HOME_ASSISTANT: ft.Icons.HOME,
 }
@@ -42,6 +44,7 @@ ACTION_ACCENT_COLORS = {
     ACTION_CALL_WEBHOOK: ft.Colors.ORANGE_300,
     ACTION_WAKE_ON_LAN: ft.Colors.GREEN_300,
     ACTION_DELAY: ft.Colors.AMBER_300,
+    ACTION_LOCAL_SEQUENCE: ft.Colors.TEAL_300,
     ACTION_REMOTE_SEQUENCE: ft.Colors.INDIGO_300,
     ACTION_HOME_ASSISTANT: ft.Colors.PINK_300,
 }
@@ -243,8 +246,10 @@ def build_sequence_editor_header(
     run_on_app_start_checkbox: ft.Checkbox,
     action_labels: Mapping[str, str],
     on_run_sequence: Callable,
+    on_stop_sequence: Callable,
     on_delete_sequence: Callable,
     on_add_step: Callable[[str], None],
+    is_sequence_running: bool,
 ) -> list[ft.Control]:
     return [
         ft.Container(
@@ -258,6 +263,7 @@ def build_sequence_editor_header(
                         controls=[
                             sequence_name_field,
                             ft.ElevatedButton("Lancer", icon=ft.Icons.PLAY_ARROW, on_click=on_run_sequence),
+                            ft.OutlinedButton("Stop", icon=ft.Icons.STOP, on_click=on_stop_sequence, disabled=not is_sequence_running),
                             ft.OutlinedButton("Supprimer", icon=ft.Icons.DELETE, on_click=on_delete_sequence),
                         ]
                     ),
@@ -406,6 +412,7 @@ def build_step_card(
     step: ActionStep,
     index: int,
     peers: Sequence[PeerInfo],
+    local_sequences: Sequence[LaunchSequence],
     action_labels: Mapping[str, str],
     on_update_string: Callable[[str], Callable],
     on_update_bool: Callable[[str], Callable],
@@ -416,16 +423,79 @@ def build_step_card(
     is_running: bool,
     is_completed: bool,
     show_drag_handle: bool,
+    drag_group: str | None,
+    on_step_drop: Callable | None,
     on_toggle_collapse: Callable,
     on_run_step: Callable,
     on_remove_step: Callable,
     on_move_step: Callable[[int], Callable],
 ) -> ft.Control:
+    def build_card_shell(*, content_controls: list[ft.Control], spacing: int) -> ft.Container:
+        return ft.Container(
+            key=step.id,
+            content=ft.Card(
+                content=ft.Container(
+                    padding=ft.padding.symmetric(horizontal=14, vertical=10),
+                    border_radius=16,
+                    border=state_border,
+                    content=ft.Column(spacing=spacing, controls=content_controls),
+                )
+            ),
+        )
+
+    def build_drag_handle(*, color: str, bgcolor: str) -> ft.Control:
+        return ft.Container(
+            width=34,
+            height=34,
+            border_radius=10,
+            bgcolor=bgcolor,
+            alignment=ft.Alignment.CENTER,
+            content=ft.Icon(ft.Icons.DRAG_INDICATOR, color=color, size=18),
+        )
+
+    def build_drag_feedback() -> ft.Control:
+        return ft.Container(
+            width=760,
+            opacity=0.92,
+            shadow=ft.BoxShadow(blur_radius=18, color=ft.Colors.BLACK26, offset=ft.Offset(0, 8)),
+            content=ft.Card(
+                content=ft.Container(
+                    padding=14,
+                    border_radius=16,
+                    border=ft.border.all(2, accent_color),
+                    bgcolor=ft.Colors.SURFACE,
+                    content=ft.Row(
+                        spacing=12,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[
+                            build_drag_handle(color=ft.Colors.PRIMARY, bgcolor=ft.Colors.PRIMARY_CONTAINER),
+                            ft.Container(
+                                width=40,
+                                height=40,
+                                border_radius=12,
+                                bgcolor=accent_color,
+                                alignment=ft.Alignment.CENTER,
+                                content=ft.Icon(action_icon, color=ft.Colors.BLACK),
+                            ),
+                            ft.Column(
+                                spacing=2,
+                                expand=True,
+                                controls=[
+                                    ft.Text(f"Étape {index + 1} - {action_labels[step.action_type]}", size=16, weight=ft.FontWeight.BOLD),
+                                    ft.Text(step_summary, size=12, color=ft.Colors.OUTLINE),
+                                ],
+                            ),
+                        ],
+                    ),
+                )
+            ),
+        )
+
     accent_color = ACTION_ACCENT_COLORS.get(step.action_type, ft.Colors.PRIMARY)
     action_icon = ACTION_ICONS.get(step.action_type, ft.Icons.PLAY_ARROW)
-    peer_options = [ft.dropdown.Option(key="", text="")]
+    peer_options: list[ft.dropdown.Option] = []
     remote_sequence_options: list[ft.dropdown.Option] = []
-    peer_option_keys = {""}
+    peer_option_keys: set[str] = set()
     remote_sequence_option_keys: set[str] = set()
     selected_peer = next((peer for peer in peers if peer.node_id == step.remote_peer_id), None)
     selected_remote_sequence = None
@@ -460,6 +530,9 @@ def build_step_card(
         step_summary = step.mac_address.strip() or "Adresse MAC non définie"
     elif step.action_type == ACTION_DELAY:
         step_summary = f"{step.seconds:g}s"
+    elif step.action_type == ACTION_LOCAL_SEQUENCE:
+        selected_local = next((s for s in local_sequences if s.id == step.local_sequence_id), None)
+        step_summary = selected_local.name if selected_local is not None else (step.local_sequence_id.strip() or "Séquence locale non définie")
     elif step.action_type == ACTION_REMOTE_SEQUENCE:
         selected_peer_label = selected_peer.name if selected_peer is not None else step.remote_peer_id.strip()
         selected_sequence_label = selected_remote_sequence.name if selected_remote_sequence is not None else step.remote_sequence_id.strip()
@@ -475,9 +548,14 @@ def build_step_card(
     leading_controls: list[ft.Control] = []
     if show_drag_handle:
         leading_controls.append(
-            ft.ReorderableDragHandle(
-                content=ft.Icon(ft.Icons.DRAG_INDICATOR, color=ft.Colors.OUTLINE),
-                mouse_cursor=ft.MouseCursor.GRAB,
+            ft.Draggable(
+                key=step.id,
+                group=drag_group or "sequence-step",
+                axis=ft.Axis.VERTICAL,
+                max_simultaneous_drags=1,
+                content=build_drag_handle(color=ft.Colors.ON_SURFACE_VARIANT, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
+                content_when_dragging=build_drag_handle(color=ft.Colors.OUTLINE_VARIANT, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH),
+                content_feedback=build_drag_feedback(),
             )
         )
     leading_controls.extend(
@@ -540,17 +618,39 @@ def build_step_card(
     ]
 
     if is_collapsed:
-        return ft.Container(
-            key=step.id,
-            content=ft.Card(
-                content=ft.Container(
-                    padding=14,
-                    border_radius=16,
-                    border=state_border,
-                    content=ft.Column(spacing=10, controls=fields),
-                )
-            ),
-        )
+        card_content = build_card_shell(content_controls=fields, spacing=10)
+        if on_step_drop is not None and show_drag_handle:
+            target_shell = ft.Container(
+                border_radius=18,
+                border=ft.border.all(2, ft.Colors.TRANSPARENT),
+                padding=0,
+                content=card_content,
+            )
+
+            def on_target_will_accept(event: ft.DragWillAcceptEvent) -> None:
+                target_shell.border = ft.border.all(2, ft.Colors.PRIMARY if event.accept else ft.Colors.ERROR)
+                target_shell.bgcolor = ft.Colors.PRIMARY_CONTAINER if event.accept else ft.Colors.ERROR_CONTAINER
+                target_shell.update()
+
+            def on_target_leave(_: ft.DragTargetLeaveEvent) -> None:
+                target_shell.border = ft.border.all(2, ft.Colors.TRANSPARENT)
+                target_shell.bgcolor = None
+                target_shell.update()
+
+            def on_target_accept(event: ft.DragTargetEvent) -> None:
+                target_shell.border = ft.border.all(2, ft.Colors.TRANSPARENT)
+                target_shell.bgcolor = None
+                target_shell.update()
+                on_step_drop(event)
+
+            return ft.DragTarget(
+                group=drag_group or "sequence-step",
+                content=target_shell,
+                on_will_accept=on_target_will_accept,
+                on_leave=on_target_leave,
+                on_accept=on_target_accept,
+            )
+        return card_content
 
     if step.action_type == ACTION_LAUNCH_APP:
         fields.extend(
@@ -633,10 +733,22 @@ def build_step_card(
         )
     elif step.action_type == ACTION_DELAY:
         fields.append(ft.TextField(label="Secondes", value=f"{step.seconds:g}", on_change=on_update_seconds))
+    elif step.action_type == ACTION_LOCAL_SEQUENCE:
+        local_seq_options = [ft.dropdown.Option(key=s.id, text=s.name) for s in local_sequences]
+        fields.append(
+            ft.Dropdown(
+                label="Séquence locale",
+                value=step.local_sequence_id or None,
+                options=local_seq_options,
+                on_select=on_update_string("local_sequence_id"),
+            )
+        )
+        if not local_sequences:
+            fields.append(ft.Text("Aucune autre séquence disponible.", size=12, color=ft.Colors.OUTLINE))
     elif step.action_type == ACTION_REMOTE_SEQUENCE:
         fields.extend(
             [
-                ft.Dropdown(label="Poste distant", value=step.remote_peer_id, options=peer_options, on_select=on_update_remote_peer),
+                ft.Dropdown(label="Poste distant", value=step.remote_peer_id or None, options=peer_options, on_select=on_update_remote_peer),
                 ft.Dropdown(label="Séquence distante", value=step.remote_sequence_id or None, options=remote_sequence_options, on_select=on_update_string("remote_sequence_id")),
             ]
         )
@@ -654,14 +766,36 @@ def build_step_card(
             ]
         )
 
-    return ft.Container(
-        key=step.id,
-        content=ft.Card(
-            content=ft.Container(
-                padding=14,
-                border_radius=16,
-                border=state_border,
-                content=ft.Column(spacing=12, controls=fields),
-            )
-        ),
-    )
+    card_content = build_card_shell(content_controls=fields, spacing=12)
+    if on_step_drop is not None and show_drag_handle:
+        target_shell = ft.Container(
+            border_radius=18,
+            border=ft.border.all(2, ft.Colors.TRANSPARENT),
+            padding=0,
+            content=card_content,
+        )
+
+        def on_target_will_accept(event: ft.DragWillAcceptEvent) -> None:
+            target_shell.border = ft.border.all(2, ft.Colors.PRIMARY if event.accept else ft.Colors.ERROR)
+            target_shell.bgcolor = ft.Colors.PRIMARY_CONTAINER if event.accept else ft.Colors.ERROR_CONTAINER
+            target_shell.update()
+
+        def on_target_leave(_: ft.DragTargetLeaveEvent) -> None:
+            target_shell.border = ft.border.all(2, ft.Colors.TRANSPARENT)
+            target_shell.bgcolor = None
+            target_shell.update()
+
+        def on_target_accept(event: ft.DragTargetEvent) -> None:
+            target_shell.border = ft.border.all(2, ft.Colors.TRANSPARENT)
+            target_shell.bgcolor = None
+            target_shell.update()
+            on_step_drop(event)
+
+        return ft.DragTarget(
+            group=drag_group or "sequence-step",
+            content=target_shell,
+            on_will_accept=on_target_will_accept,
+            on_leave=on_target_leave,
+            on_accept=on_target_accept,
+        )
+    return card_content

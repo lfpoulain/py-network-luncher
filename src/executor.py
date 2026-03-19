@@ -5,6 +5,7 @@ import os
 import shlex
 import socket
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -17,6 +18,7 @@ from models import (
     ACTION_DELAY,
     ACTION_HOME_ASSISTANT,
     ACTION_LAUNCH_APP,
+    ACTION_LOCAL_SEQUENCE,
     ACTION_OPEN_WEBPAGE,
     ACTION_REMOTE_SEQUENCE,
     ACTION_SHELL_COMMAND,
@@ -33,11 +35,16 @@ from models import (
 )
 
 
+class SequenceStopRequested(RuntimeError):
+    pass
+
+
 class SequenceExecutor:
     def __init__(
         self,
         *,
         remote_runner: Callable[[str, str], None],
+        local_runner: Callable[[str, Optional[threading.Event]], None],
         home_assistant_config_provider: Callable[[], tuple[str, str]],
         on_sequence_started: Callable[[str], None],
         on_step_started: Callable[[str, str], None],
@@ -46,27 +53,38 @@ class SequenceExecutor:
         logger: Callable[[str], None],
     ) -> None:
         self._remote_runner = remote_runner
+        self._local_runner = local_runner
         self._home_assistant_config_provider = home_assistant_config_provider
         self._on_sequence_started = on_sequence_started
         self._on_step_started = on_step_started
         self._on_step_completed = on_step_completed
         self._on_sequence_finished = on_sequence_finished
         self._logger = logger
+        self._lock = threading.RLock()
+        self._thread_local = threading.local()
+        self._sequence_stop_events: dict[str, threading.Event] = {}
+        self._sequence_threads: dict[str, threading.Thread] = {}
 
     def run_sequence(self, sequence: LaunchSequence, source: str = "manual") -> None:
-        import threading
-
+        stop_event = threading.Event()
         worker = threading.Thread(
             target=self._run_sequence_worker,
-            args=(sequence, source),
+            args=(sequence, source, stop_event),
             name=f"sequence-{sequence.id}",
             daemon=True,
         )
+        with self._lock:
+            self._sequence_stop_events[sequence.id] = stop_event
+            self._sequence_threads[sequence.id] = worker
         worker.start()
 
-    def run_step(self, step: ActionStep, source: str = "manual_step") -> None:
-        import threading
+    def run_sequence_synchronous(self, sequence: LaunchSequence, source: str = "manual", stop_event: Optional[threading.Event] = None) -> None:
+        sequence_stop_event = stop_event or self._current_stop_event() or threading.Event()
+        with self._lock:
+            self._sequence_stop_events[sequence.id] = sequence_stop_event
+        self._run_sequence_worker(sequence, source, sequence_stop_event)
 
+    def run_step(self, step: ActionStep, source: str = "manual_step") -> None:
         worker = threading.Thread(
             target=self._run_step_worker,
             args=(step, source),
@@ -75,20 +93,38 @@ class SequenceExecutor:
         )
         worker.start()
 
-    def _run_sequence_worker(self, sequence: LaunchSequence, source: str) -> None:
+    def request_stop(self, sequence_id: str) -> bool:
+        with self._lock:
+            stop_event = self._sequence_stop_events.get(sequence_id)
+        if stop_event is None:
+            return False
+        stop_event.set()
+        return True
+
+    def _run_sequence_worker(self, sequence: LaunchSequence, source: str, stop_event: threading.Event) -> None:
         self._logger(f"Début de la séquence '{sequence.name}' ({source})")
+        self._push_stop_event(stop_event)
         self._on_sequence_started(sequence.id)
         try:
             for index, step in enumerate(sequence.steps, start=1):
+                self._check_stop_requested(stop_event)
                 self._logger(f"Étape {index}/{len(sequence.steps)}: {step.display_name()}")
                 self._on_step_started(sequence.id, step.id)
-                self._run_step(step)
+                self._run_step(step, stop_event=stop_event)
+                self._check_stop_requested(stop_event)
                 self._on_step_completed(sequence.id, step.id)
             self._logger(f"Séquence '{sequence.name}' terminée")
+        except SequenceStopRequested:
+            self._logger(f"Séquence '{sequence.name}' arrêtée")
         except Exception as exc:
             self._logger(f"Séquence '{sequence.name}' en erreur: {exc}")
         finally:
             self._on_sequence_finished(sequence.id)
+            self._pop_stop_event(stop_event)
+            with self._lock:
+                if self._sequence_stop_events.get(sequence.id) is stop_event:
+                    self._sequence_stop_events.pop(sequence.id, None)
+                self._sequence_threads.pop(sequence.id, None)
 
     def _run_step_worker(self, step: ActionStep, source: str) -> None:
         step_name = step.display_name()
@@ -99,12 +135,14 @@ class SequenceExecutor:
         except Exception as exc:
             self._logger(f"Étape '{step_name}' en erreur: {exc}")
 
-    def _run_step(self, step: ActionStep) -> None:
+    def _run_step(self, step: ActionStep, *, stop_event: Optional[threading.Event] = None) -> None:
+        current_stop_event = stop_event or self._current_stop_event()
+        self._check_stop_requested(current_stop_event)
         if step.action_type == ACTION_LAUNCH_APP:
-            self._run_launch_app(step)
+            self._run_launch_app(step, current_stop_event)
             return
         if step.action_type == ACTION_SHELL_COMMAND:
-            self._run_shell_command(step)
+            self._run_shell_command(step, current_stop_event)
             return
         if step.action_type == ACTION_OPEN_WEBPAGE:
             if not step.url.strip():
@@ -126,7 +164,12 @@ class SequenceExecutor:
             self._run_wol(step)
             return
         if step.action_type == ACTION_DELAY:
-            time.sleep(max(0.0, float(step.seconds)))
+            self._sleep_with_stop(max(0.0, float(step.seconds)), current_stop_event)
+            return
+        if step.action_type == ACTION_LOCAL_SEQUENCE:
+            if not step.local_sequence_id.strip():
+                raise ValueError("Séquence locale manquante")
+            self._local_runner(step.local_sequence_id.strip(), current_stop_event)
             return
         if step.action_type == ACTION_REMOTE_SEQUENCE:
             if not step.remote_sequence_id.strip():
@@ -140,7 +183,7 @@ class SequenceExecutor:
             return
         raise ValueError(f"Type d'action inconnu: {step.action_type}")
 
-    def _run_launch_app(self, step: ActionStep) -> None:
+    def _run_launch_app(self, step: ActionStep, stop_event: Optional[threading.Event]) -> None:
         command = step.command.strip()
         if not command:
             raise ValueError("Commande vide")
@@ -150,38 +193,44 @@ class SequenceExecutor:
             if step.arguments.strip():
                 args.extend(shlex.split(step.arguments.strip(), posix=False))
             process = subprocess.Popen(args, cwd=cwd, shell=False)
-            self._wait_for_launch_condition(process, step)
+            self._wait_for_launch_condition(process, step, stop_event)
         except FileNotFoundError as exc:
             raise RuntimeError(f"Application introuvable: {command}") from exc
         except OSError as exc:
             raise RuntimeError(f"Impossible de lancer l'application: {exc}") from exc
 
-    def _run_shell_command(self, step: ActionStep) -> None:
+    def _run_shell_command(self, step: ActionStep, stop_event: Optional[threading.Event]) -> None:
         command = step.command.strip()
         if not command:
             raise ValueError("Commande shell vide")
         cwd = step.working_directory.strip() or None
         try:
             process = subprocess.Popen(command, cwd=cwd, shell=True)
-            self._wait_for_launch_condition(process, step)
+            self._wait_for_launch_condition(process, step, stop_event)
         except OSError as exc:
             raise RuntimeError(f"Impossible d'exécuter la commande shell: {exc}") from exc
 
-    def _wait_for_launch_condition(self, process: subprocess.Popen, step: ActionStep) -> None:
+    def _wait_for_launch_condition(self, process: subprocess.Popen, step: ActionStep, stop_event: Optional[threading.Event]) -> None:
         wait_mode = step.wait_mode
         if wait_mode == WAIT_MODE_NONE:
             return
         if wait_mode == WAIT_MODE_EXIT:
-            return_code = process.wait()
-            if return_code != 0:
-                raise RuntimeError(f"L'application s'est terminée avec le code {return_code}")
-            return
+            while True:
+                self._check_stop_requested(stop_event)
+                return_code = process.poll()
+                if return_code is None:
+                    time.sleep(0.2)
+                    continue
+                if return_code != 0:
+                    raise RuntimeError(f"L'application s'est terminée avec le code {return_code}")
+                return
         timeout_s = max(0.5, float(step.wait_timeout_s))
         deadline = time.monotonic() + timeout_s
         if wait_mode == WAIT_MODE_OPENED:
             validation_window_s = min(timeout_s, 1.0)
             validation_deadline = time.monotonic() + validation_window_s
             while time.monotonic() < validation_deadline:
+                self._check_stop_requested(stop_event)
                 return_code = process.poll()
                 if return_code is not None:
                     raise RuntimeError(
@@ -193,6 +242,7 @@ class SequenceExecutor:
             return
         if wait_mode == WAIT_MODE_STARTED:
             while time.monotonic() < deadline:
+                self._check_stop_requested(stop_event)
                 return_code = process.poll()
                 if return_code is not None:
                     raise RuntimeError(
@@ -209,6 +259,7 @@ class SequenceExecutor:
                 raise ValueError("Port d'attente invalide")
             last_error: Optional[Exception] = None
             while time.monotonic() < deadline:
+                self._check_stop_requested(stop_event)
                 return_code = process.poll()
                 if return_code is not None:
                     raise RuntimeError(
@@ -223,6 +274,35 @@ class SequenceExecutor:
                     last_error = exc
                     time.sleep(0.2)
             raise RuntimeError(f"Le port {wait_host}:{wait_port} ne répond pas après {timeout_s:g}s") from last_error
+
+    def _sleep_with_stop(self, duration_s: float, stop_event: Optional[threading.Event]) -> None:
+        deadline = time.monotonic() + max(0.0, duration_s)
+        while time.monotonic() < deadline:
+            self._check_stop_requested(stop_event)
+            time.sleep(min(0.2, max(0.0, deadline - time.monotonic())))
+
+    def _current_stop_event(self) -> Optional[threading.Event]:
+        stack = getattr(self._thread_local, "stop_event_stack", None)
+        if not stack:
+            return None
+        return stack[-1]
+
+    def _push_stop_event(self, stop_event: threading.Event) -> None:
+        stack = list(getattr(self._thread_local, "stop_event_stack", []))
+        stack.append(stop_event)
+        self._thread_local.stop_event_stack = stack
+
+    def _pop_stop_event(self, stop_event: threading.Event) -> None:
+        stack = list(getattr(self._thread_local, "stop_event_stack", []))
+        if stack and stack[-1] is stop_event:
+            stack.pop()
+        else:
+            stack = [item for item in stack if item is not stop_event]
+        self._thread_local.stop_event_stack = stack
+
+    def _check_stop_requested(self, stop_event: Optional[threading.Event]) -> None:
+        if stop_event is not None and stop_event.is_set():
+            raise SequenceStopRequested()
 
     def _run_webhook(self, step: ActionStep) -> None:
         url = step.url.strip()

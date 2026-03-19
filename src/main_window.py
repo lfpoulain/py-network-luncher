@@ -54,6 +54,7 @@ class MainWindow:
         self._shutdown_registered = False
         self._peer_refresh_pending = False
         self._execution_refresh_pending = False
+        self._execution_refresh_queued = False
         self._startup_warning: Optional[str] = None
         self._tray_warning: Optional[str] = None
         self.config = self._load_initial_config()
@@ -343,13 +344,16 @@ class MainWindow:
             return
         self.sequence_name_field.value = sequence.name
         self.run_on_app_start_checkbox.value = sequence.run_on_app_start
+        is_sequence_running = self.service.is_sequence_running(sequence.id)
         header_controls = build_sequence_editor_header(
             sequence_name_field=self.sequence_name_field,
             run_on_app_start_checkbox=self.run_on_app_start_checkbox,
             action_labels=ACTION_LABELS,
             on_run_sequence=self._run_selected_sequence,
+            on_stop_sequence=self._stop_selected_sequence,
             on_delete_sequence=self._delete_selected_sequence,
             on_add_step=self._add_step,
+            is_sequence_running=is_sequence_running,
         )
         if not sequence.steps:
             self.sequence_editor_column.controls.extend(header_controls)
@@ -361,21 +365,6 @@ class MainWindow:
                 )
             )
             return
-
-        def handle_step_reorder(event: ft.OnReorderEvent) -> None:
-            old_index = int(event.old_index or 0)
-            new_index = int(event.new_index or 0)
-            if old_index < new_index:
-                new_index -= 1
-            if not 0 <= old_index < len(sequence.steps):
-                return
-            new_index = max(0, min(len(sequence.steps) - 1, new_index))
-            if new_index == old_index:
-                return
-            sequence.steps.insert(new_index, sequence.steps.pop(old_index))
-            if self._persist_safe():
-                self._refresh_sequence_editor()
-                self.page.update()
 
         active_step_id = self.service.get_active_step_id(sequence.id)
         completed_step_ids = self.service.get_completed_step_ids(sequence.id)
@@ -390,16 +379,13 @@ class MainWindow:
             )
             for index, step in enumerate(sequence.steps)
         ]
+        self.sequence_editor_column.controls.extend(header_controls)
         self.sequence_editor_column.controls.append(
-            ft.ReorderableListView(
+            ft.ListView(
                 expand=True,
-                build_controls_on_demand=False,
-                spacing=12,
+                spacing=4,
                 padding=0,
-                show_default_drag_handles=False,
-                header=ft.Column(spacing=12, controls=header_controls),
                 controls=step_controls,
-                on_reorder=handle_step_reorder,
             )
         )
 
@@ -472,20 +458,29 @@ class MainWindow:
 
     def _schedule_execution_refresh(self) -> None:
         if self._execution_refresh_pending:
+            self._execution_refresh_queued = True
             return
         self._execution_refresh_pending = True
+        self._execution_refresh_queued = False
         try:
             self.page.run_task(self._apply_execution_refresh)
         except Exception:
             self._execution_refresh_pending = False
+            self._execution_refresh_queued = False
 
     async def _apply_execution_refresh(self) -> None:
         try:
-            self._refresh_sequence_editor()
-            self._refresh_logs()
-            self.page.update()
+            while True:
+                self._execution_refresh_queued = False
+                self._refresh_sequence_editor()
+                self._refresh_logs()
+                self.page.update()
+                if not self._execution_refresh_queued:
+                    break
         finally:
             self._execution_refresh_pending = False
+            if self._execution_refresh_queued:
+                self._schedule_execution_refresh()
 
     def _select_sequence(self, sequence_id: str) -> None:
         self.selected_sequence_id = sequence_id
@@ -525,6 +520,19 @@ class MainWindow:
         except Exception as exc:
             self._set_status(self._format_exception(exc), error=True)
         self._refresh_logs()
+        self.page.update()
+
+    def _stop_selected_sequence(self, _=None) -> None:
+        sequence = self._selected_sequence()
+        if sequence is None:
+            return
+        stopped = self.service.stop_local_sequence(sequence.id)
+        if stopped:
+            self._set_status(f"Arrêt demandé pour la séquence '{sequence.name}'")
+        else:
+            self._set_status(f"Aucune séquence en cours à arrêter pour '{sequence.name}'", error=True)
+        self._refresh_logs()
+        self._refresh_sequence_editor()
         self.page.update()
 
     def _on_sequence_name_changed(self, _=None) -> None:
@@ -567,6 +575,8 @@ class MainWindow:
         show_drag_handle: bool,
     ) -> ft.Control:
         peers = self.service.get_peers()
+        local_sequences = [s for s in self.service.get_sequences() if s.id != sequence.id]
+        drag_group = f"sequence-steps-{sequence.id}"
 
         def update_string(attr: str):
             def handler(event):
@@ -700,11 +710,30 @@ class MainWindow:
                     self.page.update()
             return handler
 
+        def accept_step_drop(event: ft.DragTargetEvent):
+            source_control = getattr(event, "src", None)
+            source_step_id = str(getattr(source_control, "key", "") or "")
+            if not source_step_id or source_step_id == step.id:
+                return
+            source_index = next((i for i, item in enumerate(sequence.steps) if item.id == source_step_id), None)
+            target_index = next((i for i, item in enumerate(sequence.steps) if item.id == step.id), None)
+            if source_index is None or target_index is None:
+                return
+            moved_step = sequence.steps.pop(source_index)
+            if source_index < target_index:
+                target_index -= 1
+            sequence.steps.insert(target_index, moved_step)
+            if self._persist_safe():
+                self._set_status("Ordre des étapes enregistré")
+                self._refresh_sequence_editor()
+                self.page.update()
+
         return build_step_card(
             sequence=sequence,
             step=step,
             index=index,
             peers=peers,
+            local_sequences=local_sequences,
             action_labels=ACTION_LABELS,
             on_update_string=update_string,
             on_update_bool=update_bool,
@@ -715,6 +744,8 @@ class MainWindow:
             is_running=is_running,
             is_completed=is_completed,
             show_drag_handle=show_drag_handle,
+            drag_group=drag_group,
+            on_step_drop=accept_step_drop,
             on_toggle_collapse=toggle_collapse,
             on_run_step=run_step,
             on_remove_step=remove_step,

@@ -52,6 +52,7 @@ class LauncherService:
         )
         self._executor = SequenceExecutor(
             remote_runner=self.run_remote_sequence,
+            local_runner=self._run_local_sequence_step,
             home_assistant_config_provider=lambda: (self.config.settings.home_assistant_url, self.config.settings.home_assistant_token),
             on_sequence_started=self._on_sequence_started,
             on_step_started=self._on_step_started,
@@ -104,6 +105,10 @@ class LauncherService:
         with self._lock:
             return self._active_sequence_steps.get(sequence_id)
 
+    def is_sequence_running(self, sequence_id: str) -> bool:
+        with self._lock:
+            return sequence_id in self._active_sequence_steps
+
     def get_completed_step_ids(self, sequence_id: str) -> set[str]:
         with self._lock:
             return set(self._completed_sequence_steps.get(sequence_id, set()))
@@ -133,6 +138,20 @@ class LauncherService:
 
     def run_local_step(self, step: ActionStep, source: str = "manual_step") -> None:
         self._executor.run_step(step.clone(), source=source)
+
+    def stop_local_sequence(self, sequence_id: str) -> bool:
+        stopped = self._executor.request_stop(sequence_id)
+        if stopped:
+            self.log(f"Arrêt demandé pour la séquence '{sequence_id}'")
+            self._notify_execution_state_updated()
+        return stopped
+
+    def _run_local_sequence_step(self, sequence_id: str, stop_event: Optional[threading.Event] = None) -> None:
+        sequence = self.get_sequence(sequence_id)
+        if sequence is None:
+            raise ValueError(f"Séquence locale introuvable: {sequence_id}")
+        clone = sequence.clone()
+        self._executor.run_sequence_synchronous(clone, source="nested_local_sequence", stop_event=stop_event)
 
     def run_remote_sequence(self, peer_id: str, sequence_id: str) -> None:
         peer = self._resolve_peer(peer_id=peer_id)
@@ -170,11 +189,14 @@ class LauncherService:
     def _on_step_completed(self, sequence_id: str, step_id: str) -> None:
         with self._lock:
             self._completed_sequence_steps.setdefault(sequence_id, set()).add(step_id)
+            if self._active_sequence_steps.get(sequence_id) == step_id:
+                self._active_sequence_steps[sequence_id] = ""
         self._notify_execution_state_updated()
 
     def _on_sequence_finished(self, sequence_id: str) -> None:
         with self._lock:
             self._active_sequence_steps.pop(sequence_id, None)
+            self._completed_sequence_steps.pop(sequence_id, None)
         self._notify_execution_state_updated()
 
     def _notify_execution_state_updated(self) -> None:

@@ -12,6 +12,7 @@ ACTION_OPEN_WEBPAGE = "open_webpage"
 ACTION_CALL_WEBHOOK = "call_webhook"
 ACTION_WAKE_ON_LAN = "wake_on_lan"
 ACTION_DELAY = "delay"
+ACTION_LOCAL_SEQUENCE = "local_sequence"
 ACTION_REMOTE_SEQUENCE = "remote_sequence"
 ACTION_HOME_ASSISTANT = "home_assistant"
 
@@ -22,6 +23,7 @@ ACTION_TYPES = (
     ACTION_CALL_WEBHOOK,
     ACTION_WAKE_ON_LAN,
     ACTION_DELAY,
+    ACTION_LOCAL_SEQUENCE,
     ACTION_REMOTE_SEQUENCE,
     ACTION_HOME_ASSISTANT,
 )
@@ -33,6 +35,7 @@ ACTION_LABELS = {
     ACTION_CALL_WEBHOOK: "Appeler un webhook",
     ACTION_WAKE_ON_LAN: "Wake on LAN",
     ACTION_DELAY: "Délai",
+    ACTION_LOCAL_SEQUENCE: "Séquence locale",
     ACTION_REMOTE_SEQUENCE: "Séquence distante",
     ACTION_HOME_ASSISTANT: "Home Assistant",
 }
@@ -122,6 +125,7 @@ class ActionStep:
     mac_address: str = ""
     broadcast_ip: str = "255.255.255.255"
     seconds: float = 1.0
+    local_sequence_id: str = ""
     remote_peer_id: str = ""
     remote_sequence_id: str = ""
     home_assistant_domain: str = HOME_ASSISTANT_DOMAIN_LIGHT
@@ -150,6 +154,7 @@ class ActionStep:
             "mac_address": self.mac_address,
             "broadcast_ip": self.broadcast_ip,
             "seconds": self.seconds,
+            "local_sequence_id": self.local_sequence_id,
             "remote_peer_id": self.remote_peer_id,
             "remote_sequence_id": self.remote_sequence_id,
             "home_assistant_domain": self.home_assistant_domain,
@@ -208,6 +213,7 @@ class ActionStep:
             mac_address=str(data.get("mac_address") or ""),
             broadcast_ip=str(data.get("broadcast_ip") or "255.255.255.255"),
             seconds=max(0.0, seconds),
+            local_sequence_id=str(data.get("local_sequence_id") or ""),
             remote_peer_id=str(data.get("remote_peer_id") or ""),
             remote_sequence_id=str(data.get("remote_sequence_id") or ""),
             home_assistant_domain=home_assistant_domain,
