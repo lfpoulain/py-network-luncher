@@ -5,6 +5,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), ver
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-28
+
 ### Nouveautés
 
 - Nouvelle interface : navigation latérale, barre d'état réseau (postes en ligne, erreurs de port), notifications avec action « Annuler ».
@@ -56,5 +58,6 @@ Première version : séquences locales et distantes, découverte LAN, API HTTP, 
 webhook / Wake-on-LAN / délai / séquence locale / séquence distante / Home Assistant, zone de notification,
 démarrage avec Windows, installateur Inno Setup.
 
-[Unreleased]: https://github.com/lfpoulain/py-network-luncher/compare/3fb7792...HEAD
+[Unreleased]: https://github.com/lfpoulain/py-network-luncher/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/lfpoulain/py-network-luncher/releases/tag/v0.2.0
 [0.1.0]: https://github.com/lfpoulain/py-network-luncher/tree/3fb7792
