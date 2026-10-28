@@ -1,32 +1,68 @@
+; Installeur Windows de Py Network Launcher (Inno Setup 6).
+; Généré par scripts\build.ps1 : ISCC.exe /DAppVersion=x.y.z installer\py-network-launcher.iss
+
+#ifndef AppVersion
+  #define AppVersion "0.0.0-dev"
+#endif
+#define AppName "Py Network Launcher"
+#define AppExe "Py Network Launcher.exe"
+#define AppUrl "https://github.com/lfpoulain/py-network-luncher"
+
 [Setup]
 AppId={{5E296F2B-0E9B-4A9F-8E36-0D31E5D8A4C7}
-AppName=Py Network Launcher
-AppVersion=0.1.0
-DefaultDirName={autopf}\Py Network Launcher
-DefaultGroupName=Py Network Launcher
-UninstallDisplayIcon={app}\Py Network Launcher.exe
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppVerName={#AppName} {#AppVersion}
+AppPublisher=LFPoulain
+AppPublisherURL={#AppUrl}
+AppSupportURL={#AppUrl}/issues
+AppUpdatesURL={#AppUrl}/releases
+VersionInfoProductVersion={#AppVersion}
+DefaultDirName={autopf}\{#AppName}
+DefaultGroupName={#AppName}
+DisableProgramGroupPage=yes
+UninstallDisplayIcon={app}\{#AppExe}
+UninstallDisplayName={#AppName}
+SetupIconFile=..\assets\app_icon.ico
+LicenseFile=..\LICENSE
+ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-Compression=lzma
+PrivilegesRequired=admin
+; Ferme l'application si elle tourne pendant une mise à jour (mutex créé par l'app).
+AppMutex=Local\PyNetworkLauncher-single-instance
+CloseApplications=yes
+Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=admin
-OutputDir=dist
-OutputBaseFilename=PyNetworkLauncherSetup
+OutputDir=..\dist
+OutputBaseFilename=PyNetworkLauncher-Setup-{#AppVersion}
+
+[Languages]
+Name: "french"; MessagesFile: "compiler:Languages\French.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "..\dist\Py Network Launcher\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\{#AppName}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Py Network Launcher"; Filename: "{app}\Py Network Launcher.exe"
-Name: "{autodesktop}\Py Network Launcher"; Filename: "{app}\Py Network Launcher.exe"
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
+
+[Registry]
+; Supprime l'entrée « démarrer avec Windows » créée par l'application lors de la désinstallation.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "{#AppName}"; Flags: uninsdeletevalue dontcreatekey
 
 [Run]
-Filename: "{cmd}"; Parameters: "/C netsh advfirewall firewall delete rule name=""Py Network Launcher TCP"""; Flags: runhidden
-Filename: "{cmd}"; Parameters: "/C netsh advfirewall firewall delete rule name=""Py Network Launcher UDP"""; Flags: runhidden
-Filename: "{cmd}"; Parameters: "/C netsh advfirewall firewall add rule name=""Py Network Launcher TCP"" dir=in action=allow program=""{app}\Py Network Launcher.exe"" protocol=TCP profile=private enable=yes"; Flags: runhidden
-Filename: "{cmd}"; Parameters: "/C netsh advfirewall firewall add rule name=""Py Network Launcher UDP"" dir=in action=allow program=""{app}\Py Network Launcher.exe"" protocol=UDP profile=private enable=yes"; Flags: runhidden
-Filename: "{app}\Py Network Launcher.exe"; Description: "Lancer Py Network Launcher"; Flags: nowait postinstall skipifsilent
+; Autorise l'API (TCP) et la découverte (UDP) sur les réseaux privés.
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#AppName} TCP"""; Flags: runhidden
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#AppName} UDP"""; Flags: runhidden
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#AppName} TCP"" dir=in action=allow program=""{app}\{#AppExe}"" protocol=TCP profile=private,domain enable=yes"; Flags: runhidden
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#AppName} UDP"" dir=in action=allow program=""{app}\{#AppExe}"" protocol=UDP profile=private,domain enable=yes"; Flags: runhidden
+Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [UninstallRun]
-Filename: "{cmd}"; Parameters: "/C netsh advfirewall firewall delete rule name=""Py Network Launcher TCP"""; Flags: runhidden
-Filename: "{cmd}"; Parameters: "/C netsh advfirewall firewall delete rule name=""Py Network Launcher UDP"""; Flags: runhidden
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#AppName} TCP"""; Flags: runhidden; RunOnceId: "DelFirewallTcp"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#AppName} UDP"""; Flags: runhidden; RunOnceId: "DelFirewallUdp"

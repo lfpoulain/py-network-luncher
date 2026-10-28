@@ -1,9 +1,22 @@
+# Environnements et caches Python
 .venv/
+venv/
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Build
 build/
 dist/
-installer/dist/
 *.spec.bak
+
+# Données locales de développement
+.dev-data/
+
+# Éditeurs / OS
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

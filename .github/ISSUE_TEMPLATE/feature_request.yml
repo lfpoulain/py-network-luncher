@@ -1,0 +1,16 @@
+name: Proposer une amélioration
+description: Une idée de nouvelle étape, d'option ou d'amélioration
+labels: ["amélioration"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: Besoin
+      description: Quel problème veux-tu résoudre ? Dans quel setup (nombre de postes, logiciels…) ?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposition
+      description: Ce que l'application pourrait faire.

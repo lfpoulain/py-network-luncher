@@ -4,40 +4,68 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "py-network-launcher"
-version = "0.1.0"
-description = "Desktop launcher LAN pair-à-pair avec Flet"
+dynamic = ["version"]
+description = "Orchestration de séquences d'actions entre postes Windows d'un même réseau local"
 readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "LFPoulain" }]
 requires-python = ">=3.11"
+classifiers = [
+  "Environment :: Win32 (MS Windows)",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "License :: Other/Proprietary License",
+]
 dependencies = [
   "flet==0.82.2",
+  "flet-desktop==0.82.2; platform_system == 'Windows' or platform_system == 'Darwin'",
   "Pillow>=10,<12",
   "pystray>=0.19,<0.20",
 ]
 
 [project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "ruff>=0.6",
+]
 build = [
-  "flet-desktop==0.82.2; platform_system == 'Windows' or platform_system == 'Darwin'",
   "pyinstaller>=6,<7",
 ]
 
 [project.scripts]
-py-network-launcher = "desktop_entry:main"
+py-network-launcher = "py_network_launcher.app:main"
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-py-modules = [
-  "app_views",
-  "desktop_entry",
-  "discovery",
-  "executor",
-  "launcher_app",
-  "launcher_cli",
-  "main_window",
-  "models",
-  "runtime_paths",
-  "service",
-  "system_tray",
-  "startup",
-  "storage",
-  "ui_components",
+[project.urls]
+Homepage = "https://github.com/lfpoulain/py-network-luncher"
+Releases = "https://github.com/lfpoulain/py-network-luncher/releases"
+
+[tool.setuptools.dynamic]
+version = { attr = "py_network_launcher.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 160
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = [
+  "E501",   # longueur gérée par `ruff format` ; les textes d'interface restent sur une ligne
+  "RUF001", # caractères typographiques français (’, «, ») voulus dans les textes
+  "RUF002",
+  "RUF003",
+  "SIM105", # contextlib.suppress n'apporte rien ici
+  "UP007",  # Optional[X] conservé pour la lisibilité
+  "UP045",
 ]
+
+[tool.ruff.lint.isort]
+known-first-party = ["py_network_launcher"]

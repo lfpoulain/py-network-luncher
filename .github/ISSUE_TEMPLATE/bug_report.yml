@@ -1,0 +1,41 @@
+name: Signaler un bug
+description: Quelque chose ne fonctionne pas comme prévu
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Que se passe-t-il ?
+      description: Ce que tu as fait, ce que tu attendais, ce qui s'est produit.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes pour reproduire
+      placeholder: |
+        1. Créer une séquence avec une étape « … »
+        2. Cliquer sur Lancer
+        3. …
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Visible dans Réglages → À propos.
+      placeholder: "0.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installation
+      options:
+        - Installateur
+        - Archive portable
+        - Depuis les sources
+  - type: textarea
+    id: logs
+    attributes:
+      label: Journal
+      description: Extrait de %APPDATA%\PyNetworkLauncher\logs\py-network-launcher.log (pense à masquer les tokens).
+      render: text
