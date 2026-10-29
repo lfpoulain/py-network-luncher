@@ -35,6 +35,11 @@ def app_icon_path() -> Path:
     return assets_dir() / "app_icon.ico"
 
 
+def bundled_flet_client_dir() -> Path:
+    """Client Flet (flet.exe) embarqué par le .spec dans l'exécutable."""
+    return app_root() / "flet_client" / "flet"
+
+
 def data_dir() -> Path:
     """Dossier des données utilisateur (`%APPDATA%\\PyNetworkLauncher`)."""
     override = os.environ.get(HOME_ENV_VAR, "").strip()

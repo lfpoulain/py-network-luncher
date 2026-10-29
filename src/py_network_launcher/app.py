@@ -12,7 +12,7 @@ from typing import Optional
 
 from py_network_launcher import APP_NAME, __version__
 from py_network_launcher.logs import get_logger, setup_logging
-from py_network_launcher.paths import assets_dir, config_path, logs_dir
+from py_network_launcher.paths import assets_dir, bundled_flet_client_dir, config_path, is_frozen, logs_dir
 from py_network_launcher.windows import SingleInstanceLock
 
 logger = get_logger()
@@ -41,6 +41,13 @@ def _ask_running_instance_to_show() -> bool:
         return False
 
 
+def _use_bundled_flet_client() -> None:
+    """Exécutable : utilise le client Flet embarqué plutôt que de le télécharger depuis GitHub au premier lancement."""
+    client = bundled_flet_client_dir()
+    if is_frozen() and (client / "flet.exe").is_file():
+        os.environ.setdefault("FLET_VIEW_PATH", str(client))
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     args = parse_args(argv)
     setup_logging(logs_dir())
@@ -64,6 +71,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(f"Interface disponible sur http://127.0.0.1:{args.web}", flush=True)
             ft.run(target, view=ft.AppView.WEB_BROWSER, port=args.web, assets_dir=str(assets_dir()))
         else:
+            _use_bundled_flet_client()
             view = ft.AppView.FLET_APP_HIDDEN if args.hidden else ft.AppView.FLET_APP
             ft.run(target, view=view, assets_dir=str(assets_dir()))
     except Exception:

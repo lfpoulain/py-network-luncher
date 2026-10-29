@@ -1,4 +1,5 @@
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -114,6 +115,14 @@ def test_shell_command_failure_includes_output() -> None:
         actions.run_shell_command(ActionStep(command="echo message-d-erreur && exit 4", wait_mode=WAIT_MODE_EXIT), StopToken())
     assert "code 4" in str(error.value)
     assert "message-d-erreur" in str(error.value)
+
+
+def test_output_tail_closes_the_pipe() -> None:
+    process = subprocess.Popen([PYTHON, "-c", "print('a'); print('b')"], stdout=subprocess.PIPE, text=True)
+    tail = actions.OutputTail(process)
+    process.wait(timeout=10)
+    assert tail.summary() == "a | b"
+    assert process.stdout is not None and process.stdout.closed
 
 
 def test_shell_command_can_be_stopped() -> None:

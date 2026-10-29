@@ -5,6 +5,19 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), ver
 
 ## [Unreleased]
 
+### Corrections
+
+- L'application n'éteint plus le HDR et n'assombrit plus les écrans externes sous Windows pendant qu'elle tourne (correctif Flet 1.0.4).
+- Plus de bref affichage de la fenêtre dans le coin de l'écran au démarrage réduit dans la zone de notification.
+- Un champ en cours de saisie ne perd plus le focus quand un élément voisin apparaît ou disparaît.
+- La sortie d'une commande shell est refermée après lecture (fuite de ressource à chaque exécution).
+
+### Technique
+
+- Passage de Flet 0.82.2 à 1.0.5.
+- Le client Flet (`flet.exe`), qui n'est plus fourni par le paquet `flet-desktop`, est téléchargé une fois au build, vérifié (SHA-256) et embarqué : l'application installée fonctionne toujours hors ligne dès le premier lancement.
+- Extra `web` pour le mode `--web` de développement (`pip install -e ".[web]"`).
+
 ## [0.2.0] - 2026-10-28
 
 ### Nouveautés

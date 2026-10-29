@@ -153,9 +153,10 @@ class OutputTail:
 
     def _read(self, process: subprocess.Popen) -> None:
         assert process.stdout is not None
-        for line in process.stdout:
-            if line.strip():
-                self.lines.append(line.rstrip())
+        with process.stdout:
+            for line in process.stdout:
+                if line.strip():
+                    self.lines.append(line.rstrip())
 
     def summary(self) -> str:
         self._thread.join(timeout=1.0)

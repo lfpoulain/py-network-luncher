@@ -23,7 +23,7 @@ Pour tester sans toucher à ta vraie configuration, pointe l'application vers un
 $env:PY_NETWORK_LAUNCHER_HOME = "$PWD\.dev-data"; python main.py
 ```
 
-L'option `--web PORT` sert l'interface à un navigateur (développement uniquement, nécessite `pip install "flet-web==0.82.2" "fastapi<0.116"`).
+L'option `--web PORT` sert l'interface à un navigateur sans l'ouvrir (développement uniquement, nécessite `pip install -e ".[web]"`).
 
 ## Organisation du code
 
@@ -50,6 +50,21 @@ scripts/release.py            préparation des versions
 Règles de l'UI : les événements du service arrivent sur des threads de fond et passent par
 `MainWindow.invalidate()`, qui regroupe les rafraîchissements sur la boucle Flet. Les contrôles en cours
 d'édition ne sont jamais reconstruits pendant une exécution (les cartes d'étape se mettent à jour sur place).
+
+Flet met la page à jour à la fin d'un gestionnaire d'événement, **sauf** si celui-ci a appelé `update()` lui-même
+(ou `notify()` / `confirm()`, qui le font). Un gestionnaire qui modifie encore l'écran après un de ces appels doit
+terminer par `page.update()`.
+
+## Monter la version de Flet
+
+Flet change souvent d'API : Dependabot l'ignore, la montée se fait à la main.
+
+1. Lis les sections *Breaking changes* et *Deprecations* du [changelog Flet](https://github.com/flet-dev/flet/blob/main/CHANGELOG.md).
+2. Change les versions de `flet`, `flet-desktop` et `flet-web` dans `pyproject.toml`.
+3. Ajoute l'empreinte SHA-256 de `flet-windows.zip` de la nouvelle version dans `FLET_CLIENT_SHA256`
+   (`py-network-launcher.spec`) : champ `digest` de l'asset dans la release GitHub de Flet.
+4. Lance les tests, puis l'interface avec `python -W always main.py --web 8550` : les contrôles dépréciés s'affichent
+   en `DeprecationWarning` dans la console. Termine par le build complet.
 
 ## Build Windows
 

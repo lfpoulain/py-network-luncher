@@ -149,6 +149,10 @@ def empty_state(*, icon: ft.IconData, title: str, message: str, action: Optional
     )
 
 
+def field_border() -> ft.OutlineInputBorder:
+    return ft.OutlineInputBorder(border_radius=10)
+
+
 def text_field(
     label: str,
     value: str = "",
@@ -173,7 +177,7 @@ def text_field(
         expand=expand,
         width=width,
         dense=True,
-        border_radius=10,
+        border=field_border(),
         multiline=multiline,
         min_lines=2 if multiline else None,
         max_lines=6 if multiline else None,
@@ -200,7 +204,7 @@ def dropdown(
         expand=expand,
         width=width,
         dense=True,
-        border_radius=10,
+        border=field_border(),
         hint_text=hint,
     )
 

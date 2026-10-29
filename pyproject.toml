@@ -17,8 +17,8 @@ classifiers = [
   "License :: Other/Proprietary License",
 ]
 dependencies = [
-  "flet==0.82.2",
-  "flet-desktop==0.82.2; platform_system == 'Windows' or platform_system == 'Darwin'",
+  "flet==1.0.5",
+  "flet-desktop==1.0.5; platform_system == 'Windows' or platform_system == 'Darwin'",
   "Pillow>=10,<12",
   "pystray>=0.19,<0.20",
 ]
@@ -30,6 +30,9 @@ dev = [
 ]
 build = [
   "pyinstaller>=6,<7",
+]
+web = [
+  "flet-web==1.0.5", # option --web (développement)
 ]
 
 [project.scripts]

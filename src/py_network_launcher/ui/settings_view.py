@@ -187,6 +187,7 @@ class SettingsView:
         self.window.page.update()
         await self.window.apply_network_settings(api, discovery)
         self.refresh_network()
+        self.window.page.update()  # update() déjà appelé : Flet ne rafraîchira pas seul à la fin
 
     # --- Home Assistant -------------------------------------------------------------------
 
@@ -218,6 +219,7 @@ class SettingsView:
             self._ha_result.value, self._ha_result.color = f"✗ {exc}", COLOR_ERROR
         finally:
             self._ha_test.disabled = False
+            self.window.page.update()
 
     # --- Démarrage et fermeture -----------------------------------------------------------
 
@@ -230,6 +232,7 @@ class SettingsView:
             enabled, hidden = settings.start_with_windows, settings.start_minimized
         self._start_with_windows.value, self._start_hidden.value = enabled, hidden
         self.refresh()
+        self.window.page.update()  # set_startup() a affiché une notification (donc appelé update())
 
     def _on_close_action_change(self, event: Any) -> None:
         value = str(event.control.value or "")

@@ -283,7 +283,9 @@ class MainWindow:
         try:
             self.store.save(self.config)
         except RuntimeError as exc:
-            self.notify(str(exc), error=True)
+            # Différé : l'appelant continue de modifier l'écran après la sauvegarde.
+            message = str(exc)
+            self.run_on_ui(lambda: self.notify(message, error=True))
 
     def flush_pending_save(self) -> None:
         self.store.flush()
@@ -305,6 +307,9 @@ class MainWindow:
         )
         self._snack = snack
         self.page.show_dialog(snack)
+        # show_dialog ne pousse que la notification, et depuis Flet 0.83 un gestionnaire qui a appelé update()
+        # n'est plus suivi d'une mise à jour automatique : on envoie donc tout l'état modifié jusqu'ici.
+        self.page.update()
 
     def confirm(self, *, title: str, message: str, confirm_label: str, on_confirm: Callable[[], None], destructive: bool = False) -> None:
         def close(confirmed: bool) -> None:
@@ -328,6 +333,7 @@ class MainWindow:
             actions_alignment=ft.MainAxisAlignment.END,
         )
         self.page.show_dialog(dialog)
+        self.page.update()  # voir notify()
 
     def on_run_finished(self, sequence_id: str, outcome: str, error: Optional[str]) -> None:
         sequence = self.config.find_sequence(sequence_id)

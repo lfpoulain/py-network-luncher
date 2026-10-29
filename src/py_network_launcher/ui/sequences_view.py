@@ -31,6 +31,7 @@ from py_network_launcher.ui.widgets import (
     badge,
     dropdown,
     empty_state,
+    field_border,
     muted_text,
     panel,
 )
@@ -113,7 +114,7 @@ class SequencesView:
         self._name_field = ft.TextField(
             label="Nom de la séquence",
             dense=True,
-            border_radius=10,
+            border=field_border(),
             expand=True,
             text_size=16,
             on_change=self._on_name_change,
