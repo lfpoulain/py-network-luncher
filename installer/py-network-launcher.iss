@@ -28,8 +28,7 @@ LicenseFile=..\LICENSE
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
-; Ferme l'application si elle tourne pendant une mise à jour (mutex créé par l'app).
-AppMutex=Local\PyNetworkLauncher-single-instance
+; L'application en cours est arrêtée par StopRunningApp ([Code]) ; le gestionnaire de redémarrage reste en secours.
 CloseApplications=yes
 Compression=lzma2/max
 SolidCompression=yes
@@ -66,3 +65,28 @@ Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags
 [UninstallRun]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#AppName} TCP"""; Flags: runhidden; RunOnceId: "DelFirewallTcp"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#AppName} UDP"""; Flags: runhidden; RunOnceId: "DelFirewallUdp"
+
+[Code]
+// Fermer la fenêtre ne quitte pas l'application (elle se réduit dans la zone de notification) : ni la demande de
+// fermeture d'Inno Setup ni le gestionnaire de redémarrage de Windows ne peuvent l'arrêter. On arrête donc le
+// processus avec son arborescence (flet.exe). Une modification non encore sauvegardée l'est en moins d'une seconde.
+procedure StopRunningApp();
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM "{#AppExe}"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if ResultCode = 0 then
+    Sleep(500);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  StopRunningApp();
+  Result := '';
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  StopRunningApp();
+  Result := True;
+end;

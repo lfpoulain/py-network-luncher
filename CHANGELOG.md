@@ -5,6 +5,11 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), ver
 
 ## [Unreleased]
 
+### Corrections
+
+- L'installateur et la désinstallation arrêtent eux-mêmes l'application en cours, y compris réduite dans la zone de
+  notification (il fallait passer par le Gestionnaire des tâches).
+
 ## [0.2.1] - 2026-10-29
 
 ### Corrections
