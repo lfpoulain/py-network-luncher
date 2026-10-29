@@ -2,7 +2,7 @@
 
 __all__ = ["APP_ID", "APP_NAME", "__version__"]
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 APP_NAME = "Py Network Launcher"
 APP_ID = "PyNetworkLauncher"

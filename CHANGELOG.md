@@ -5,6 +5,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), ver
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-29
+
 ### Corrections
 
 - L'application n'éteint plus le HDR et n'assombrit plus les écrans externes sous Windows pendant qu'elle tourne (correctif Flet 1.0.4).
@@ -71,6 +73,7 @@ Première version : séquences locales et distantes, découverte LAN, API HTTP, 
 webhook / Wake-on-LAN / délai / séquence locale / séquence distante / Home Assistant, zone de notification,
 démarrage avec Windows, installateur Inno Setup.
 
-[Unreleased]: https://github.com/lfpoulain/py-network-luncher/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/lfpoulain/py-network-luncher/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/lfpoulain/py-network-luncher/releases/tag/v0.2.1
 [0.2.0]: https://github.com/lfpoulain/py-network-luncher/releases/tag/v0.2.0
 [0.1.0]: https://github.com/lfpoulain/py-network-luncher/tree/3fb7792
